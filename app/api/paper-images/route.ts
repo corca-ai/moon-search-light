@@ -14,7 +14,9 @@ interface PaperImageData {
 
 // CSV 파일을 읽고 파싱하는 함수 (최적화된 형식: title,pdf_url,snapshots)
 function parseCSV(csvContent: string): Map<string, { pdfUrl: string; snapshots: string[] }> {
-  const lines = csvContent.split('\n');
+  // CRLF를 LF로 변환
+  const normalizedContent = csvContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = normalizedContent.split('\n');
   const paperImages = new Map<string, { pdfUrl: string; snapshots: string[] }>();
 
   // 헤더 제외하고 시작
