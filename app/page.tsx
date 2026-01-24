@@ -90,8 +90,7 @@ export default function Home() {
           papers.forEach(paper => {
             if (snapshotData[paper.title]) {
               paper.snapshots = snapshotData[paper.title].snapshots;
-              paper.slug = snapshotData[paper.title].slug;
-              paper.pdfUrl = snapshotData[paper.title].pdfUrl;
+                paper.pdfUrl = snapshotData[paper.title].pdfUrl;
             }
           });
         }

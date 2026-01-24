@@ -9,7 +9,6 @@ export interface Paper {
   citationCount: number;
   url: string;
   snapshots?: string[];
-  slug?: string;
   pdfUrl?: string;
 }
 

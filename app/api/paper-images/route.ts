@@ -8,15 +8,14 @@ const PDF_PREFIX = 'http://arxiv.org/pdf/';
 
 interface PaperImageData {
   title: string;
-  slug: string;
   pdfUrl: string;
   snapshots: string[];
 }
 
-// CSV 파일을 읽고 파싱하는 함수 (최적화된 형식: title,slug,pdf_url,snapshots)
-function parseCSV(csvContent: string): Map<string, { slug: string; pdfUrl: string; snapshots: string[] }> {
+// CSV 파일을 읽고 파싱하는 함수 (최적화된 형식: title,pdf_url,snapshots)
+function parseCSV(csvContent: string): Map<string, { pdfUrl: string; snapshots: string[] }> {
   const lines = csvContent.split('\n');
-  const paperImages = new Map<string, { slug: string; pdfUrl: string; snapshots: string[] }>();
+  const paperImages = new Map<string, { pdfUrl: string; snapshots: string[] }>();
 
   // 헤더 제외하고 시작
   let currentLine = '';
@@ -36,27 +35,24 @@ function parseCSV(csvContent: string): Map<string, { slug: string; pdfUrl: strin
 
     if (!insideQuotes) {
       try {
-        // CSV 라인 파싱: title,slug,pdf_url,snapshots
+        // CSV 라인 파싱: title,pdf_url,snapshots
         let title = '';
-        let slug = '';
         let pdfUrl = '';
         let snapshotsStr = '';
 
-        // 패턴 1: 따옴표로 감싸진 제목 "title",slug,pdf_url,"snapshots"
-        let match = currentLine.match(/^"([^"]*(?:""[^"]*)*)","?([^,]*)"?,([^,]*),("?\{[^}]*\}"?)$/);
+        // 패턴 1: 따옴표로 감싸진 제목 "title",pdf_url,"snapshots"
+        let match = currentLine.match(/^"([^"]*(?:""[^"]*)*)","?([^,]*)"?,("?\{[^}]*\}"?)$/);
         if (match) {
           title = match[1].replace(/""/g, '"').replace(/\s+/g, ' ').trim();
-          slug = match[2].replace(/^"|"$/g, '').trim();
-          pdfUrl = match[3].replace(/^"|"$/g, '').trim();
-          snapshotsStr = match[4].replace(/^"|"$/g, '');
+          pdfUrl = match[2].replace(/^"|"$/g, '').trim();
+          snapshotsStr = match[3].replace(/^"|"$/g, '');
         } else {
-          // 패턴 2: 따옴표 없는 제목 title,slug,pdf_url,snapshots
-          match = currentLine.match(/^([^,]+),([^,]*),([^,]*),("?\{[^}]*\}"?)$/);
+          // 패턴 2: 따옴표 없는 제목 title,pdf_url,snapshots
+          match = currentLine.match(/^([^,]+),([^,]*),("?\{[^}]*\}"?)$/);
           if (match) {
             title = match[1].replace(/\s+/g, ' ').trim();
-            slug = match[2].trim();
-            pdfUrl = match[3].trim();
-            snapshotsStr = match[4].replace(/^"|"$/g, '');
+            pdfUrl = match[2].trim();
+            snapshotsStr = match[3].replace(/^"|"$/g, '');
           }
         }
 
@@ -72,10 +68,10 @@ function parseCSV(csvContent: string): Map<string, { slug: string; pdfUrl: strin
           // pdf_url 전체 URL 복원
           const fullPdfUrl = pdfUrl.startsWith('http') ? pdfUrl : (pdfUrl ? PDF_PREFIX + pdfUrl : '');
 
-          if (snapshots.length > 0 || fullPdfUrl || slug) {
+          if (snapshots.length > 0 || fullPdfUrl) {
             // 제목을 정규화하여 키로 사용
             const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-            paperImages.set(normalizedTitle, { slug, pdfUrl: fullPdfUrl, snapshots });
+            paperImages.set(normalizedTitle, { pdfUrl: fullPdfUrl, snapshots });
           }
         }
       } catch (e) {
@@ -91,9 +87,9 @@ function parseCSV(csvContent: string): Map<string, { slug: string; pdfUrl: strin
 }
 
 // 전역 캐시
-let cachedPaperImages: Map<string, { slug: string; pdfUrl: string; snapshots: string[] }> | null = null;
+let cachedPaperImages: Map<string, { pdfUrl: string; snapshots: string[] }> | null = null;
 
-function loadPaperImages(): Map<string, { slug: string; pdfUrl: string; snapshots: string[] }> {
+function loadPaperImages(): Map<string, { pdfUrl: string; snapshots: string[] }> {
   if (cachedPaperImages) {
     return cachedPaperImages;
   }
@@ -123,14 +119,14 @@ export async function POST(request: NextRequest) {
     }
 
     const paperImages = loadPaperImages();
-    const result: Record<string, { slug: string; pdfUrl: string; snapshots: string[] }> = {};
+    const result: Record<string, { pdfUrl: string; snapshots: string[] }> = {};
 
-    // 각 제목에 대해 스냅샷, PDF URL, slug 찾기
+    // 각 제목에 대해 스냅샷, PDF URL 찾기
     for (const title of titles) {
       const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
       const imageData = paperImages.get(normalizedTitle);
 
-      if (imageData && (imageData.snapshots.length > 0 || imageData.pdfUrl || imageData.slug)) {
+      if (imageData && (imageData.snapshots.length > 0 || imageData.pdfUrl)) {
         result[title] = imageData;
       }
     }
