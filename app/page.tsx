@@ -410,9 +410,16 @@ ${summary.researchLandscape}
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-          <h1 className="text-xl font-medium text-gray-900 dark:text-white">moon-search-light</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">논문 탐색 도구</p>
+        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-medium text-gray-900 dark:text-white">moon-search-light</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">논문 탐색 도구</p>
+          </div>
+          {assistantActive && chatMessages.length > 1 && (
+            <button onClick={downloadResearchOverview} className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+              연구 개요 다운로드
+            </button>
+          )}
         </div>
         <div className="flex gap-2">
           {/* Collapsed Search Indicator (Assistant 활성시) */}
@@ -561,14 +568,7 @@ ${summary.researchLandscape}
                 <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex flex-col h-[60vh] mt-3">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-base font-medium text-gray-700 dark:text-gray-300">Research Assistant</span>
-                    <div className="flex gap-2">
-                      {chatMessages.length > 1 && (
-                        <button onClick={downloadResearchOverview} className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 dark:border-gray-600 px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
-                          다운로드
-                        </button>
-                      )}
-                      <button onClick={deactivateAssistant} className="text-sm text-gray-400 hover:text-gray-600">← 검색으로</button>
-                    </div>
+                    <button onClick={deactivateAssistant} className="text-sm text-gray-400 hover:text-gray-600">← 검색으로</button>
                   </div>
 
                   {/* Chat Messages */}
