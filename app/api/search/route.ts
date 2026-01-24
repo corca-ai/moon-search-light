@@ -8,6 +8,10 @@ export interface Paper {
   authors: Array<{ name: string }>;
   citationCount: number;
   url: string;
+  externalIds?: {
+    ArXiv?: string;
+    DOI?: string;
+  };
   snapshots?: string[];
   pdfUrl?: string;
 }
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
     const response = await fetch(
       `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
         query
-      )}&limit=100&fields=title,abstract,year,authors,citationCount,url`,
+      )}&limit=100&fields=title,abstract,year,authors,citationCount,url,externalIds`,
       {
         headers,
       }

@@ -405,69 +405,149 @@ ${summary.researchLandscape}
     URL.revokeObjectURL(url);
   };
 
-  const renderPaperCard = (paper: Paper, type: 'selected' | 'candidate' | 'excluded') => (
-    <div
-      key={paper.paperId}
-      className={`border border-gray-200 dark:border-gray-700 rounded p-4 ${type === 'excluded' ? 'opacity-50' : ''}`}
-    >
-      <div className="flex justify-between items-start gap-2 mb-2">
-        <h3 className="text-base font-medium text-gray-900 dark:text-white leading-snug flex-1">
-          {paper.title}
-        </h3>
-        <div className="flex gap-1 shrink-0">
-          {type === 'selected' && (
-            <button onClick={() => moveToCandidate(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">★</button>
-          )}
-          {type === 'candidate' && (
-            <>
-              <button onClick={() => moveToSelected(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">☆</button>
-              <button onClick={() => excludePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">×</button>
-            </>
-          )}
-          {type === 'excluded' && (
-            <button onClick={() => restorePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">복원</button>
-          )}
-        </div>
-      </div>
-
-      {paper.snapshots && paper.snapshots.length > 0 && type !== 'excluded' && (
-        <div className="mb-3 flex gap-2 overflow-x-auto">
-          {paper.snapshots.slice(0, 3).map((snapshot, idx) => (
-            <img key={idx} src={snapshot} alt="" className="h-24 w-auto rounded border border-gray-200 dark:border-gray-700 cursor-pointer" onClick={() => setModalImage(snapshot)} />
-          ))}
-        </div>
-      )}
-
-      <div className="flex gap-3 text-sm text-gray-500 dark:text-gray-400 mb-2">
-        {paper.year && <span>{paper.year}</span>}
-        <span>인용 {paper.citationCount}</span>
-      </div>
-
-      {type !== 'excluded' && analyses[paper.paperId] && (
-        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1.5 mb-2">
-          <div><span className="font-medium">개요:</span> {analyses[paper.paperId].overview}</div>
-          <div><span className="font-medium">목표:</span> {analyses[paper.paperId].goals}</div>
-          <div><span className="font-medium">방법론:</span> {analyses[paper.paperId].method}</div>
-          <div><span className="font-medium">결과:</span> {analyses[paper.paperId].results}</div>
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {analyses[paper.paperId].keywords.map((kw, idx) => (
-              <button key={idx} onClick={() => addKeywordToSearch(kw)} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-600">{kw}</button>
-            ))}
+  const renderPaperCard = (paper: Paper, type: 'selected' | 'candidate' | 'excluded') => {
+    // 선택된/제외된 논문: 간결한 카드
+    if (type === 'selected' || type === 'excluded') {
+      return (
+        <div
+          key={paper.paperId}
+          className={`border border-gray-200 dark:border-gray-700 rounded p-3 ${type === 'excluded' ? 'opacity-50' : ''}`}
+        >
+          <div className="flex justify-between items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white leading-snug">
+                {paper.title}
+              </h3>
+              {analyses[paper.paperId] && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed line-clamp-2">
+                  {analyses[paper.paperId].overview}
+                </p>
+              )}
+              <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-1">
+                {paper.year && <span>{paper.year}</span>}
+                {paper.year && <span>•</span>}
+                <span>인용 {paper.citationCount?.toLocaleString()}</span>
+              </div>
+            </div>
+            {type === 'selected' && (
+              <button onClick={() => moveToCandidate(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0">★</button>
+            )}
+            {type === 'excluded' && (
+              <button onClick={() => restorePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0">복원</button>
+            )}
           </div>
         </div>
-      )}
+      );
+    }
 
-      {type !== 'excluded' && !analyses[paper.paperId] && paper.abstract && (
-        <div className="text-sm text-gray-400 italic">분석 중...</div>
-      )}
+    // 후보 논문: 전체 카드
+    return (
+      <div
+        key={paper.paperId}
+        className="border border-gray-200 dark:border-gray-700 rounded p-4 flex gap-4"
+      >
+        {/* 썸네일 - 왼쪽 고정 (이미지 있을 때만 표시) */}
+        {paper.snapshots && paper.snapshots.length > 0 && (
+          <div className="shrink-0 w-32">
+            <img
+              src={paper.snapshots[0]}
+              alt=""
+              className="w-32 h-44 object-cover rounded border border-gray-200 dark:border-gray-700 cursor-pointer"
+              onClick={() => setModalImage(paper.snapshots![0])}
+            />
+            {paper.snapshots.length > 1 && (
+              <div className="flex gap-1 mt-1">
+                {paper.snapshots.slice(1, 3).map((snapshot, idx) => (
+                  <img
+                    key={idx}
+                    src={snapshot}
+                    alt=""
+                    className="w-[62px] h-10 object-cover rounded border border-gray-200 dark:border-gray-700 cursor-pointer"
+                    onClick={() => setModalImage(snapshot)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      {(paper.pdfUrl || paper.url) && (
-        <a href={paper.pdfUrl ? `https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}` : paper.url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline">
-          논문 보기
-        </a>
-      )}
-    </div>
-  );
+        {/* 콘텐츠 - 오른쪽 */}
+        <div className="flex-1 min-w-0">
+          {/* 헤더: 제목 + 액션 버튼 */}
+          <div className="flex justify-between items-start gap-3 mb-3">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white leading-relaxed flex-1">
+              {paper.title}
+            </h3>
+            <div className="flex gap-1 shrink-0">
+              <button onClick={() => moveToSelected(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">☆</button>
+              <button onClick={() => excludePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">×</button>
+            </div>
+          </div>
+
+          {/* 메타 정보 */}
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
+            {paper.year && <span className="font-medium">{paper.year}</span>}
+            {paper.year && <span className="text-gray-300 dark:text-gray-600">•</span>}
+            <span>인용 {paper.citationCount?.toLocaleString()}</span>
+            <span className="text-gray-300 dark:text-gray-600">•</span>
+            {paper.externalIds?.ArXiv ? (
+              <a href={`https://www.themoonlight.io/file?url=${encodeURIComponent(`https://arxiv.org/pdf/${paper.externalIds.ArXiv}.pdf`)}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                논문 보기 →
+              </a>
+            ) : (paper.pdfUrl || paper.url) && (
+              <a href={paper.pdfUrl ? `https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}` : paper.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
+                논문 보기 →
+              </a>
+            )}
+          </div>
+
+          {/* 분석 중: 초록 표시 */}
+          {!analyses[paper.paperId] && paper.abstract && (
+            <div className="space-y-2">
+              <div className="text-xs text-blue-500 dark:text-blue-400 font-medium">분석 중...</div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{paper.abstract}</p>
+            </div>
+          )}
+
+          {/* AI 분석 결과 */}
+          {analyses[paper.paperId] && (
+            <div className="space-y-3">
+              {/* 접을 수 있는 초록 */}
+              {paper.abstract && (
+                <details className="group">
+                  <summary className="text-xs text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-600 dark:hover:text-gray-400 select-none">
+                    <span className="group-open:hidden">▸ 초록 보기</span>
+                    <span className="hidden group-open:inline">▾ 초록 접기</span>
+                  </summary>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed pl-3 border-l-2 border-gray-200 dark:border-gray-700">{paper.abstract}</p>
+                </details>
+              )}
+
+              <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 text-sm">
+                <span className="text-gray-400 dark:text-gray-500">개요</span>
+                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].overview}</span>
+
+                <span className="text-gray-400 dark:text-gray-500">목표</span>
+                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].goals}</span>
+
+                <span className="text-gray-400 dark:text-gray-500">방법론</span>
+                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].method}</span>
+
+                <span className="text-gray-400 dark:text-gray-500">결과</span>
+                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].results}</span>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {analyses[paper.paperId].keywords.map((kw, idx) => (
+                  <button key={idx} onClick={() => addKeywordToSearch(kw)} className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">{kw}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
@@ -497,7 +577,7 @@ ${summary.researchLandscape}
           )}
 
           {/* Left Column - 검색 결과 (Assistant 비활성시) 또는 선택됨/제외됨 (Assistant 활성시) */}
-          <div className="flex-1 space-y-3">
+          <div className={`${assistantActive ? 'flex-1' : 'flex-[2]'} space-y-3`}>
             {!assistantActive ? (
               <>
                 <form onSubmit={handleSearch} className="flex gap-2">
@@ -563,7 +643,7 @@ ${summary.researchLandscape}
           </div>
 
           {/* Right Column - 선택됨/제외됨 (Assistant 비활성시) 또는 Assistant (활성시) */}
-          <div className="flex-1">
+          <div className={assistantActive ? 'flex-[2]' : 'flex-1'}>
             {!assistantActive ? (
               <div className="flex flex-col h-[calc(100vh-140px)]">
                 {/* Assistant 비활성시: 선택됨/제외됨을 오른쪽에 표시 */}
