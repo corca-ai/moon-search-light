@@ -214,7 +214,7 @@ export default function Home() {
     }
   }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds]);
 
-  const canActivateAssistant = selectedPapers.length >= 3;
+  const canActivateAssistant = selectedPapers.length >= 1;
 
   const activateAssistant = async () => {
     if (!canActivateAssistant) return;
@@ -301,7 +301,7 @@ ${summary.researchLandscape}
   };
 
   useEffect(() => {
-    if (selectedPapers.length < 3 && assistantActive) {
+    if (selectedPapers.length < 1 && assistantActive) {
       deactivateAssistant();
       setChatMessages([]);
       setAnalyzedPaperIds([]);
@@ -570,7 +570,6 @@ ${summary.researchLandscape}
                 <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex-1 overflow-hidden flex flex-col">
                   <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
                     선택됨 ({selectedPapers.length})
-                    {selectedPapers.length > 0 && selectedPapers.length < 3 && <span className="text-sm text-gray-400 ml-2">{3 - selectedPapers.length}개 더 필요</span>}
                   </div>
                   <div className="space-y-3 overflow-y-auto flex-1">
                     {selectedPapers.map(paper => renderPaperCard(paper, 'selected'))}
@@ -592,13 +591,12 @@ ${summary.researchLandscape}
 
                 {/* 분석 시작 버튼 */}
                 <div className="border border-gray-200 dark:border-gray-700 rounded p-5 text-center mt-3 shrink-0">
-                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">Research Assistant</div>
-                  {canActivateAssistant ? (
+                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Research Assistant</div>
+                  <div className="text-sm text-gray-400 mb-3">동시에 검토할 논문들을 선택하세요</div>
+                  {canActivateAssistant && (
                     <button onClick={activateAssistant} className="px-5 py-2.5 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded hover:bg-gray-700 dark:hover:bg-gray-300">
                       분석 시작
                     </button>
-                  ) : (
-                    <div className="text-sm text-gray-400">{3 - selectedPapers.length}개 더 선택 필요</div>
                   )}
                 </div>
               </div>
@@ -654,7 +652,7 @@ ${summary.researchLandscape}
                   : 'bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600'
               }`}
               onClick={canActivateAssistant ? activateAssistant : undefined}
-              title={canActivateAssistant ? '분석 시작' : `${3 - selectedPapers.length}개 더 선택 필요`}
+              title={canActivateAssistant ? '분석 시작' : '동시에 검토할 논문들을 선택하세요'}
             >
               <span className="text-xl">‹</span>
               <span className="text-sm" style={{ writingMode: 'vertical-rl' }}>Assistant</span>
