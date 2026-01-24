@@ -23,6 +23,8 @@ export default function Home() {
   const [analyses, setAnalyses] = useState<Record<string, PaperAnalysis>>({});
   const [allPapers, setAllPapers] = useState<Paper[]>([]);
   const [paperEmbeddings, setPaperEmbeddings] = useState<Record<string, number[]>>({});
+  const [sortBy, setSortBy] = useState<'relevance' | 'year-desc' | 'year-asc' | 'citations'>('relevance');
+  const [modalImage, setModalImage] = useState<string | null>(null);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,13 +43,41 @@ export default function Home() {
         throw new Error(data.error || 'Failed to fetch papers');
       }
 
-      setCandidatePapers(data.papers);
-      setRightPapers(data.excludedPapers || []);
-      setTotal(data.total);
-
       // Store all 300 papers (included + excluded)
       const all300Papers = [...(data.allPapers || [])];
       setAllPapers(all300Papers);
+
+      // Fetch paper snapshots
+      if (all300Papers.length > 0) {
+        const titles = all300Papers.map(p => p.title);
+        const snapshotResponse = await fetch('/api/paper-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titles }),
+        });
+
+        if (snapshotResponse.ok) {
+          const snapshotData = await snapshotResponse.json();
+          // Add snapshots, slug, and pdfUrl to papers
+          all300Papers.forEach(paper => {
+            if (snapshotData[paper.title]) {
+              paper.snapshots = snapshotData[paper.title].snapshots;
+              paper.slug = snapshotData[paper.title].slug;
+              paper.pdfUrl = snapshotData[paper.title].pdfUrl;
+            }
+          });
+        }
+      }
+
+      setCandidatePapers(data.papers.map((p: Paper) => {
+        const enhanced = all300Papers.find(ap => ap.paperId === p.paperId);
+        return enhanced || p;
+      }));
+      setRightPapers((data.excludedPapers || []).map((p: Paper) => {
+        const enhanced = all300Papers.find(ap => ap.paperId === p.paperId);
+        return enhanced || p;
+      }));
+      setTotal(data.total);
 
       // Create embeddings for all 300 papers
       if (all300Papers.length > 0) {
@@ -83,6 +113,21 @@ export default function Home() {
   const moveToCandidate = (paper: Paper) => {
     setCandidatePapers([...candidatePapers, paper]);
     setSelectedPapers(selectedPapers.filter(p => p.paperId !== paper.paperId));
+  };
+
+  const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
+    const sorted = [...papers];
+    switch (sortType) {
+      case 'year-desc':
+        return sorted.sort((a, b) => (b.year || 0) - (a.year || 0));
+      case 'year-asc':
+        return sorted.sort((a, b) => (a.year || 0) - (b.year || 0));
+      case 'citations':
+        return sorted.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+      case 'relevance':
+      default:
+        return sorted; // Keep original order (relevance from search)
+    }
   };
 
   const addKeywordToSearch = (keyword: string) => {
@@ -286,6 +331,22 @@ export default function Home() {
                       </button>
                     </div>
 
+                    {paper.snapshots && paper.snapshots.length > 0 && (
+                      <div className="mb-3 overflow-x-auto">
+                        <div className="flex gap-2">
+                          {paper.snapshots.slice(0, 3).map((snapshot, idx) => (
+                            <img
+                              key={idx}
+                              src={snapshot}
+                              alt={`${paper.title} - snapshot ${idx + 1}`}
+                              className="h-32 w-auto rounded border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform cursor-pointer"
+                              onClick={() => setModalImage(snapshot)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2 mb-3 text-sm text-gray-600 dark:text-gray-400">
                       {paper.year && (
                         <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
@@ -366,7 +427,17 @@ export default function Home() {
                       </div>
                     ) : null}
 
-                    {paper.url && (
+                    {paper.pdfUrl && (
+                      <a
+                        href={`https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                      >
+                        Moonlight에서 보기 →
+                      </a>
+                    )}
+                    {!paper.pdfUrl && paper.url && (
                       <a
                         href={paper.url}
                         target="_blank"
@@ -389,9 +460,24 @@ export default function Home() {
             {/* Bottom: Candidate Papers */}
             <div>
               <div className="mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Candidate Papers
-                </h2>
+                <div className="flex justify-between items-center mb-2">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Candidate Papers
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600 dark:text-gray-400">정렬:</label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                      className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="relevance">관련성</option>
+                      <option value="year-desc">최신순</option>
+                      <option value="year-asc">오래된순</option>
+                      <option value="citations">인용 많은순</option>
+                    </select>
+                  </div>
+                </div>
                 {total > 0 && (
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     총 {total.toLocaleString()}개 중 필터링된 결과 ({candidatePapers.length}개)
@@ -399,7 +485,7 @@ export default function Home() {
                 )}
               </div>
               <div className="space-y-4">
-                {candidatePapers.map((paper) => (
+                {sortPapers(candidatePapers, sortBy).map((paper) => (
                   <div
                     key={paper.paperId}
                     className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
@@ -416,6 +502,22 @@ export default function Home() {
                         ↑
                       </button>
                     </div>
+
+                    {paper.snapshots && paper.snapshots.length > 0 && (
+                      <div className="mb-3 overflow-x-auto">
+                        <div className="flex gap-2">
+                          {paper.snapshots.slice(0, 3).map((snapshot, idx) => (
+                            <img
+                              key={idx}
+                              src={snapshot}
+                              alt={`${paper.title} - snapshot ${idx + 1}`}
+                              className="h-32 w-auto rounded border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform cursor-pointer"
+                              onClick={() => setModalImage(snapshot)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap gap-2 mb-3 text-sm text-gray-600 dark:text-gray-400">
                       {paper.year && (
@@ -497,7 +599,17 @@ export default function Home() {
                       </div>
                     ) : null}
 
-                    {paper.url && (
+                    {paper.pdfUrl && (
+                      <a
+                        href={`https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                      >
+                        Moonlight에서 보기 →
+                      </a>
+                    )}
+                    {!paper.pdfUrl && paper.url && (
                       <a
                         href={paper.url}
                         target="_blank"
@@ -531,7 +643,7 @@ export default function Home() {
               )}
             </div>
             <div className="space-y-4">
-              {rightPapers.map((paper) => (
+              {sortPapers(rightPapers, sortBy).map((paper) => (
                 <div
                   key={paper.paperId}
                   className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow opacity-75"
@@ -563,7 +675,17 @@ export default function Home() {
                     </p>
                   )}
 
-                  {paper.url && (
+                  {paper.pdfUrl && (
+                    <a
+                      href={`https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                    >
+                      Moonlight에서 보기 →
+                    </a>
+                  )}
+                  {!paper.pdfUrl && paper.url && (
                     <a
                       href={paper.url}
                       target="_blank"
@@ -589,6 +711,30 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Image Modal */}
+      {modalImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
+          onClick={() => setModalImage(null)}
+        >
+          <div className="relative max-w-7xl max-h-full">
+            <button
+              onClick={() => setModalImage(null)}
+              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold transition-colors z-10"
+              title="닫기"
+            >
+              ×
+            </button>
+            <img
+              src={modalImage}
+              alt="Paper snapshot"
+              className="max-w-full max-h-[90vh] w-auto h-auto rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

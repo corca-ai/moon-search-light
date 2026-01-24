@@ -8,6 +8,9 @@ export interface Paper {
   authors: Array<{ name: string }>;
   citationCount: number;
   url: string;
+  snapshots?: string[];
+  slug?: string;
+  pdfUrl?: string;
 }
 
 interface SemanticScholarResponse {
@@ -77,8 +80,26 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Sort by citation count
-    const sortedIncluded = [...includedPapers].sort((a, b) => b.citationCount - a.citationCount);
+    // Smart sorting: prioritize exact/close title matches, then relevance with citation boost
+    const normalizeText = (text: string) => text.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const queryNormalized = normalizeText(positiveQuery);
+
+    const sortedIncluded = [...includedPapers].sort((a, b) => {
+      const aTitleNorm = normalizeText(a.title);
+      const bTitleNorm = normalizeText(b.title);
+
+      // Exact match or contains exact query: boost to top
+      const aExactMatch = aTitleNorm === queryNormalized || aTitleNorm.includes(queryNormalized);
+      const bExactMatch = bTitleNorm === queryNormalized || bTitleNorm.includes(queryNormalized);
+
+      if (aExactMatch && !bExactMatch) return -1;
+      if (!aExactMatch && bExactMatch) return 1;
+
+      // If both match or both don't match, maintain original relevance order from API
+      // (Semantic Scholar already ranks by relevance)
+      return 0;
+    });
+
     const sortedExcluded = [...excludedPapers].sort((a, b) => b.citationCount - a.citationCount);
 
     // Return top 20 for display, but all papers for embedding
