@@ -11,45 +11,65 @@ interface PaperAnalysis {
   keywords: string[];
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface ActivityLog {
+  id: number;
+  time: Date;
+  type: 'search' | 'select' | 'deselect' | 'exclude' | 'restore' | 'sort';
+  message: string;
+}
+
 export default function Home() {
-  const [positiveQuery, setPositiveQuery] = useState('');
-  const [negativeQuery, setNegativeQuery] = useState('');
+  const [query, setQuery] = useState('');
   const [selectedPapers, setSelectedPapers] = useState<Paper[]>([]);
   const [candidatePapers, setCandidatePapers] = useState<Paper[]>([]);
-  const [rightPapers, setRightPapers] = useState<Paper[]>([]);
+  const [excludedPapers, setExcludedPapers] = useState<Paper[]>([]);
+  const [excludedExpanded, setExcludedExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [analyses, setAnalyses] = useState<Record<string, PaperAnalysis>>({});
-  const [allPapers, setAllPapers] = useState<Paper[]>([]);
-  const [paperEmbeddings, setPaperEmbeddings] = useState<Record<string, number[]>>({});
   const [sortBy, setSortBy] = useState<'relevance' | 'year-desc' | 'year-asc' | 'citations'>('relevance');
   const [modalImage, setModalImage] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [assistantActive, setAssistantActive] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [logIdCounter, setLogIdCounter] = useState(0);
+
+  const addLog = (type: ActivityLog['type'], message: string) => {
+    setActivityLogs(prev => [{
+      id: logIdCounter,
+      time: new Date(),
+      type,
+      message,
+    }, ...prev].slice(0, 50)); // 최대 50개 유지
+    setLogIdCounter(prev => prev + 1);
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!positiveQuery.trim()) return;
+    if (!query.trim()) return;
 
     setLoading(true);
     setError('');
+    setExcludedPapers([]);
 
     try {
-      const response = await fetch(
-        `/api/search?positive=${encodeURIComponent(positiveQuery)}&negative=${encodeURIComponent(negativeQuery)}`
-      );
+      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch papers');
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to fetch papers');
 
-      // Store all 300 papers (included + excluded)
-      const all300Papers = [...(data.allPapers || [])];
-      setAllPapers(all300Papers);
+      const papers = [...(data.papers || [])];
 
-      // Fetch paper snapshots
-      if (all300Papers.length > 0) {
-        const titles = all300Papers.map(p => p.title);
+      if (papers.length > 0) {
+        const titles = papers.map(p => p.title);
         const snapshotResponse = await fetch('/api/paper-images', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -58,8 +78,7 @@ export default function Home() {
 
         if (snapshotResponse.ok) {
           const snapshotData = await snapshotResponse.json();
-          // Add snapshots, slug, and pdfUrl to papers
-          all300Papers.forEach(paper => {
+          papers.forEach(paper => {
             if (snapshotData[paper.title]) {
               paper.snapshots = snapshotData[paper.title].snapshots;
               paper.slug = snapshotData[paper.title].slug;
@@ -69,37 +88,12 @@ export default function Home() {
         }
       }
 
-      setCandidatePapers(data.papers.map((p: Paper) => {
-        const enhanced = all300Papers.find(ap => ap.paperId === p.paperId);
-        return enhanced || p;
-      }));
-      setRightPapers((data.excludedPapers || []).map((p: Paper) => {
-        const enhanced = all300Papers.find(ap => ap.paperId === p.paperId);
-        return enhanced || p;
-      }));
+      setCandidatePapers(papers);
       setTotal(data.total);
-
-      // Create embeddings for all 300 papers
-      if (all300Papers.length > 0) {
-        const embedResponse = await fetch('/api/embed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ papers: all300Papers }),
-        });
-
-        if (embedResponse.ok) {
-          const embedData = await embedResponse.json();
-          const embeddingsMap: Record<string, number[]> = {};
-          all300Papers.forEach((paper, idx) => {
-            embeddingsMap[paper.paperId] = embedData.embeddings[idx];
-          });
-          setPaperEmbeddings(embeddingsMap);
-        }
-      }
+      addLog('search', `"${query}" 검색 → ${papers.length}개 결과`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setCandidatePapers([]);
-      setRightPapers([]);
     } finally {
       setLoading(false);
     }
@@ -108,120 +102,56 @@ export default function Home() {
   const moveToSelected = (paper: Paper) => {
     setSelectedPapers([...selectedPapers, paper]);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
+    addLog('select', `선택: ${paper.title.slice(0, 40)}...`);
   };
 
   const moveToCandidate = (paper: Paper) => {
     setCandidatePapers([...candidatePapers, paper]);
     setSelectedPapers(selectedPapers.filter(p => p.paperId !== paper.paperId));
+    addLog('deselect', `선택해제: ${paper.title.slice(0, 40)}...`);
+  };
+
+  const excludePaper = (paper: Paper) => {
+    setExcludedPapers([...excludedPapers, paper]);
+    setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
+    addLog('exclude', `제외: ${paper.title.slice(0, 40)}...`);
+  };
+
+  const restorePaper = (paper: Paper) => {
+    setCandidatePapers([...candidatePapers, paper]);
+    setExcludedPapers(excludedPapers.filter(p => p.paperId !== paper.paperId));
+    addLog('restore', `복원: ${paper.title.slice(0, 40)}...`);
   };
 
   const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
     const sorted = [...papers];
     switch (sortType) {
-      case 'year-desc':
-        return sorted.sort((a, b) => (b.year || 0) - (a.year || 0));
-      case 'year-asc':
-        return sorted.sort((a, b) => (a.year || 0) - (b.year || 0));
-      case 'citations':
-        return sorted.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
-      case 'relevance':
-      default:
-        return sorted; // Keep original order (relevance from search)
+      case 'year-desc': return sorted.sort((a, b) => (b.year || 0) - (a.year || 0));
+      case 'year-asc': return sorted.sort((a, b) => (a.year || 0) - (b.year || 0));
+      case 'citations': return sorted.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+      default: return sorted;
     }
   };
 
   const addKeywordToSearch = (keyword: string) => {
-    const currentKeywords = positiveQuery.trim();
+    const currentKeywords = query.trim();
     const keywordLower = keyword.toLowerCase();
-
-    // Check if keyword already exists (case-insensitive)
     const existingKeywords = currentKeywords.split(/\s+/).map(k => k.toLowerCase());
-    if (existingKeywords.includes(keywordLower)) {
-      return; // Don't add duplicate
-    }
-
-    if (currentKeywords) {
-      setPositiveQuery(`${currentKeywords} ${keyword}`);
-    } else {
-      setPositiveQuery(keyword);
-    }
+    if (existingKeywords.includes(keywordLower)) return;
+    setQuery(currentKeywords ? `${currentKeywords} ${keyword}` : keyword);
   };
-
-  // Calculate cosine similarity between two vectors
-  const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
-    const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
-    const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
-    const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
-    return dotProduct / (magnitudeA * magnitudeB);
-  };
-
-  // Re-rank papers based on similarity to selected papers and citation count
-  useEffect(() => {
-    if (selectedPapers.length === 0 || Object.keys(paperEmbeddings).length === 0) {
-      return;
-    }
-
-    // Calculate average embedding of selected papers
-    const selectedEmbeddings = selectedPapers
-      .map(p => paperEmbeddings[p.paperId])
-      .filter(e => e);
-
-    if (selectedEmbeddings.length === 0) return;
-
-    const avgEmbedding = selectedEmbeddings[0].map((_, i) =>
-      selectedEmbeddings.reduce((sum, emb) => sum + emb[i], 0) / selectedEmbeddings.length
-    );
-
-    // Calculate combined score for all papers
-    const allPapersWithScore = allPapers.map(paper => {
-      const embedding = paperEmbeddings[paper.paperId];
-      if (!embedding) return { paper, score: 0 };
-
-      // Semantic similarity score (0-1)
-      const similarity = cosineSimilarity(avgEmbedding, embedding);
-
-      // Citation score (normalized using log scale)
-      const maxCitations = Math.max(...allPapers.map(p => p.citationCount));
-      const citationScore = maxCitations > 0
-        ? Math.log(paper.citationCount + 1) / Math.log(maxCitations + 1)
-        : 0;
-
-      // Combined score: 60% similarity, 40% citations
-      const combinedScore = similarity * 0.6 + citationScore * 0.4;
-
-      return { paper, score: combinedScore };
-    });
-
-    // Sort by score and update candidate papers (exclude already selected)
-    const selectedIds = new Set(selectedPapers.map(p => p.paperId));
-    const reranked = allPapersWithScore
-      .filter(({ paper }) => !selectedIds.has(paper.paperId))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 20)
-      .map(({ paper }) => paper);
-
-    setCandidatePapers(reranked);
-  }, [selectedPapers, paperEmbeddings]);
 
   const fetchAnalysis = async (paper: Paper) => {
     if (!paper.abstract || analyses[paper.paperId]) return;
-
     try {
       const response = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: paper.title,
-          abstract: paper.abstract,
-        }),
+        body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
       });
-
       if (response.ok) {
         const analysis = await response.json();
-        setAnalyses(prev => ({
-          ...prev,
-          [paper.paperId]: analysis,
-        }));
+        setAnalyses(prev => ({ ...prev, [paper.paperId]: analysis }));
       }
     } catch (err) {
       console.error('Failed to fetch analysis:', err);
@@ -238,501 +168,461 @@ export default function Home() {
 
   useEffect(() => {
     const leftPapers = [...selectedPapers, ...candidatePapers];
-    if (leftPapers.length > 0) {
-      processPapersInBatches(leftPapers);
-    }
+    if (leftPapers.length > 0) processPapersInBatches(leftPapers);
   }, [selectedPapers, candidatePapers]);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            Paper Search
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Powered by Semantic Scholar
-          </p>
-        </div>
+  const canActivateAssistant = selectedPapers.length >= 3;
 
-        <form onSubmit={handleSearch} className="mb-8">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Positive Keywords
-              </label>
-              <input
-                type="text"
-                value={positiveQuery}
-                onChange={(e) => setPositiveQuery(e.target.value)}
-                placeholder="포함할 키워드..."
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Negative Keywords
-              </label>
-              <input
-                type="text"
-                value={negativeQuery}
-                onChange={(e) => setNegativeQuery(e.target.value)}
-                placeholder="제외할 키워드..."
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
-              />
-            </div>
-          </div>
-          <div className="text-center">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors"
-            >
-              {loading ? '검색 중...' : '검색'}
-            </button>
-          </div>
-        </form>
+  const activateAssistant = async () => {
+    if (!canActivateAssistant) return;
+    setAssistantActive(true);
+    setChatLoading(true);
 
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-lg">
-            {error}
-          </div>
-        )}
+    // 선택된 논문 목록 표시
+    const paperList = selectedPapers.map((p, i) => `${i + 1}. ${p.title} (${p.year || '연도 미상'})`).join('\n');
+    setChatMessages([{
+      role: 'assistant',
+      content: `**선택된 논문 ${selectedPapers.length}개를 분석 중입니다...**\n\n${paperList}`,
+    }]);
 
-        <div className="grid grid-cols-2 gap-6">
-          {/* Left Column - Split into Selected and Candidate */}
-          <div className="space-y-6">
-            {/* Top: Selected Papers */}
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-              <div className="mb-4">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Selected Papers
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  읽기로 확정한 논문 ({selectedPapers.length}개)
-                </p>
-              </div>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {selectedPapers.map((paper) => (
-                  <div
-                    key={paper.paperId}
-                    className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex-1">
-                        {paper.title}
-                      </h3>
-                      <button
-                        onClick={() => moveToCandidate(paper)}
-                        className="ml-2 px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded text-sm"
-                        title="아래로 내리기"
-                      >
-                        ↓
-                      </button>
-                    </div>
+    try {
+      // 통합 컨텍스트 생성
+      const response = await fetch('/api/context-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ papers: selectedPapers }),
+      });
 
-                    {paper.snapshots && paper.snapshots.length > 0 && (
-                      <div className="mb-3 overflow-x-auto">
-                        <div className="flex gap-2">
-                          {paper.snapshots.slice(0, 3).map((snapshot, idx) => (
-                            <img
-                              key={idx}
-                              src={snapshot}
-                              alt={`${paper.title} - snapshot ${idx + 1}`}
-                              className="h-32 w-auto rounded border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform cursor-pointer"
-                              onClick={() => setModalImage(snapshot)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+      if (response.ok) {
+        const summary = await response.json();
+        const contextMessage = `## 📋 통합 컨텍스트 분석
 
-                    <div className="flex flex-wrap gap-2 mb-3 text-sm text-gray-600 dark:text-gray-400">
-                      {paper.year && (
-                        <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                          {paper.year}
-                        </span>
-                      )}
-                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
-                        인용: {paper.citationCount}
-                      </span>
-                    </div>
+**선택된 논문:** ${selectedPapers.length}개
+${paperList}
 
-                    {paper.authors && paper.authors.length > 0 && (
-                      <div className="mb-2 text-sm text-gray-700 dark:text-gray-300">
-                        <strong>저자:</strong> {paper.authors.map((a) => a.name).join(', ')}
-                      </div>
-                    )}
+---
 
-                    {analyses[paper.paperId] ? (
-                      <>
-                        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded space-y-2">
-                          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                            분석 (AI)
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              개요
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].overview}
-                            </p>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              연구 목표
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].goals}
-                            </p>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              방법론
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].method}
-                            </p>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              결과
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].results}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mb-3">
-                          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                            키워드
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {analyses[paper.paperId].keywords.map((keyword, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => addKeywordToSearch(keyword)}
-                                className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 rounded text-xs hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors cursor-pointer"
-                                title="클릭하여 검색에 추가"
-                              >
-                                {keyword}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    ) : paper.abstract ? (
-                      <div className="mb-3 text-sm text-gray-500 dark:text-gray-400 italic">
-                        분석 중...
-                      </div>
-                    ) : null}
+### 공통 문제
+${summary.commonProblem}
 
-                    {paper.pdfUrl && (
-                      <a
-                        href={`https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                      >
-                        Moonlight에서 보기 →
-                      </a>
-                    )}
-                    {!paper.pdfUrl && paper.url && (
-                      <a
-                        href={paper.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                      >
-                        논문 보기 →
-                      </a>
-                    )}
-                  </div>
-                ))}
-                {selectedPapers.length === 0 && (
-                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-                    후보 논문에서 위로 올려 선택하세요.
-                  </div>
-                )}
-              </div>
-            </div>
+### 공통 방법론
+${summary.commonMethods.map((m: string) => `- ${m}`).join('\n')}
 
-            {/* Bottom: Candidate Papers */}
-            <div>
-              <div className="mb-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                    Candidate Papers
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600 dark:text-gray-400">정렬:</label>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                      className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="relevance">관련성</option>
-                      <option value="year-desc">최신순</option>
-                      <option value="year-asc">오래된순</option>
-                      <option value="citations">인용 많은순</option>
-                    </select>
-                  </div>
-                </div>
-                {total > 0 && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    총 {total.toLocaleString()}개 중 필터링된 결과 ({candidatePapers.length}개)
-                  </p>
-                )}
-              </div>
-              <div className="space-y-4">
-                {sortPapers(candidatePapers, sortBy).map((paper) => (
-                  <div
-                    key={paper.paperId}
-                    className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex-1">
-                        {paper.title}
-                      </h3>
-                      <button
-                        onClick={() => moveToSelected(paper)}
-                        className="ml-2 px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-sm"
-                        title="위로 올리기"
-                      >
-                        ↑
-                      </button>
-                    </div>
+### 주요 차이점
+${summary.differences.map((d: string) => `- ${d}`).join('\n')}
 
-                    {paper.snapshots && paper.snapshots.length > 0 && (
-                      <div className="mb-3 overflow-x-auto">
-                        <div className="flex gap-2">
-                          {paper.snapshots.slice(0, 3).map((snapshot, idx) => (
-                            <img
-                              key={idx}
-                              src={snapshot}
-                              alt={`${paper.title} - snapshot ${idx + 1}`}
-                              className="h-32 w-auto rounded border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform cursor-pointer"
-                              onClick={() => setModalImage(snapshot)}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+### 연구 지형
+${summary.researchLandscape}
 
-                    <div className="flex flex-wrap gap-2 mb-3 text-sm text-gray-600 dark:text-gray-400">
-                      {paper.year && (
-                        <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                          {paper.year}
-                        </span>
-                      )}
-                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
-                        인용: {paper.citationCount}
-                      </span>
-                    </div>
+---
 
-                    {paper.authors && paper.authors.length > 0 && (
-                      <div className="mb-2 text-sm text-gray-700 dark:text-gray-300">
-                        <strong>저자:</strong> {paper.authors.map((a) => a.name).join(', ')}
-                      </div>
-                    )}
+무엇을 도와드릴까요? 예시:
+- "후속 연구 아이디어를 제안해줘"
+- "Research Gap을 찾아줘"
+- "연구 계획서 초안을 작성해줘"`;
 
-                    {analyses[paper.paperId] ? (
-                      <>
-                        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded space-y-2">
-                          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-                            분석 (AI)
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              개요
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].overview}
-                            </p>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              연구 목표
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].goals}
-                            </p>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              방법론
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].method}
-                            </p>
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
-                              결과
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
-                              {analyses[paper.paperId].results}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mb-3">
-                          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                            키워드
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {analyses[paper.paperId].keywords.map((keyword, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => addKeywordToSearch(keyword)}
-                                className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 rounded text-xs hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors cursor-pointer"
-                                title="클릭하여 검색에 추가"
-                              >
-                                {keyword}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    ) : paper.abstract ? (
-                      <div className="mb-3 text-sm text-gray-500 dark:text-gray-400 italic">
-                        분석 중...
-                      </div>
-                    ) : null}
+        setChatMessages([{ role: 'assistant', content: contextMessage }]);
+      } else {
+        setChatMessages([{
+          role: 'assistant',
+          content: `선택하신 ${selectedPapers.length}개의 논문을 분석할 준비가 되었습니다.\n\n${paperList}\n\n무엇을 도와드릴까요?`,
+        }]);
+      }
+    } catch (err) {
+      console.error('Failed to generate context:', err);
+      setChatMessages([{
+        role: 'assistant',
+        content: `선택하신 ${selectedPapers.length}개의 논문을 분석할 준비가 되었습니다.\n\n${paperList}\n\n무엇을 도와드릴까요?`,
+      }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
-                    {paper.pdfUrl && (
-                      <a
-                        href={`https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                      >
-                        Moonlight에서 보기 →
-                      </a>
-                    )}
-                    {!paper.pdfUrl && paper.url && (
-                      <a
-                        href={paper.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                      >
-                        논문 보기 →
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {candidatePapers.length === 0 && !loading && !error && (
-                <div className="text-center text-gray-500 dark:text-gray-400 mt-12">
-                  Positive 키워드를 입력하여 논문을 찾아보세요.
-                </div>
-              )}
-            </div>
-          </div>
+  const deactivateAssistant = () => {
+    setAssistantActive(false);
+    setChatMessages([]);
+  };
 
-          {/* Right Column - Excluded Results */}
-          <div>
-            <div className="mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                Excluded Results
-              </h2>
-              {rightPapers.length > 0 && (
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Negative 키워드로 제외된 논문 ({rightPapers.length}개)
-                </p>
-              )}
-            </div>
-            <div className="space-y-4">
-              {sortPapers(rightPapers, sortBy).map((paper) => (
-                <div
-                  key={paper.paperId}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow opacity-75"
-                >
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    {paper.title}
-                  </h3>
+  useEffect(() => {
+    if (selectedPapers.length < 3 && assistantActive) deactivateAssistant();
+  }, [selectedPapers.length]);
 
-                  <div className="flex flex-wrap gap-2 mb-3 text-sm text-gray-600 dark:text-gray-400">
-                    {paper.year && (
-                      <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
-                        {paper.year}
-                      </span>
-                    )}
-                    <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded">
-                      인용: {paper.citationCount}
-                    </span>
-                  </div>
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || chatLoading) return;
+    const userMessage: ChatMessage = { role: 'user', content: chatInput };
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setChatLoading(true);
 
-                  {paper.authors && paper.authors.length > 0 && (
-                    <div className="mb-2 text-sm text-gray-700 dark:text-gray-300">
-                      <strong>저자:</strong> {paper.authors.map((a) => a.name).join(', ')}
-                    </div>
-                  )}
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...chatMessages, userMessage],
+          context: { papers: selectedPapers, analyses },
+        }),
+      });
 
-                  {paper.abstract && (
-                    <p className="text-gray-700 dark:text-gray-300 mb-3 text-sm line-clamp-3">
-                      {paper.abstract}
-                    </p>
-                  )}
+      if (!response.ok) throw new Error('Chat failed');
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader');
 
-                  {paper.pdfUrl && (
-                    <a
-                      href={`https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                    >
-                      Moonlight에서 보기 →
-                    </a>
-                  )}
-                  {!paper.pdfUrl && paper.url && (
-                    <a
-                      href={paper.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                    >
-                      논문 보기 →
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-            {rightPapers.length === 0 && !loading && !error && negativeQuery && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center text-gray-500 dark:text-gray-400">
-                제외된 논문이 없습니다.
-              </div>
-            )}
-            {rightPapers.length === 0 && !loading && !error && !negativeQuery && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center text-gray-500 dark:text-gray-400">
-                Negative 키워드를 입력하면 제외된 논문이 여기에 표시됩니다.
-              </div>
-            )}
-          </div>
+      const decoder = new TextDecoder();
+      let assistantContent = '';
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            if (data.content) {
+              assistantContent += data.content;
+              setChatMessages(prev => {
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1] = { role: 'assistant', content: assistantContent };
+                return newMessages;
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '오류가 발생했습니다.' }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const downloadResearchOverview = () => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    let markdown = `# 후속 연구 개요\n\n`;
+    markdown += `**생성일**: ${dateStr}\n\n`;
+    markdown += `---\n\n`;
+
+    // 선택된 논문 목록
+    markdown += `## 분석 대상 논문 (${selectedPapers.length}개)\n\n`;
+    selectedPapers.forEach((paper, idx) => {
+      const analysis = analyses[paper.paperId];
+      markdown += `### ${idx + 1}. ${paper.title}\n`;
+      markdown += `- **연도**: ${paper.year || '미상'}\n`;
+      markdown += `- **인용수**: ${paper.citationCount || 0}\n`;
+      if (analysis) {
+        markdown += `- **개요**: ${analysis.overview}\n`;
+        markdown += `- **목표**: ${analysis.goals}\n`;
+      }
+      markdown += `\n`;
+    });
+
+    markdown += `---\n\n`;
+
+    // 대화 내용
+    markdown += `## 연구 논의 내용\n\n`;
+    chatMessages.forEach((msg) => {
+      if (msg.role === 'user') {
+        markdown += `### 질문\n${msg.content}\n\n`;
+      } else {
+        markdown += `### AI 응답\n${msg.content}\n\n`;
+      }
+    });
+
+    markdown += `---\n\n`;
+    markdown += `*Moon Search Light에서 생성됨*\n`;
+
+    const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `research-overview-${now.getTime()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const renderPaperCard = (paper: Paper, type: 'selected' | 'candidate' | 'excluded') => (
+    <div
+      key={paper.paperId}
+      className={`border border-gray-200 dark:border-gray-700 rounded p-4 ${type === 'excluded' ? 'opacity-50' : ''}`}
+    >
+      <div className="flex justify-between items-start gap-2 mb-2">
+        <h3 className="text-base font-medium text-gray-900 dark:text-white leading-snug flex-1">
+          {paper.title}
+        </h3>
+        <div className="flex gap-1 shrink-0">
+          {type === 'selected' && (
+            <button onClick={() => moveToCandidate(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">★</button>
+          )}
+          {type === 'candidate' && (
+            <>
+              <button onClick={() => moveToSelected(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">☆</button>
+              <button onClick={() => excludePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">×</button>
+            </>
+          )}
+          {type === 'excluded' && (
+            <button onClick={() => restorePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">복원</button>
+          )}
         </div>
       </div>
 
-      {/* Image Modal */}
-      {modalImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
-          onClick={() => setModalImage(null)}
-        >
-          <div className="relative max-w-7xl max-h-full">
-            <button
-              onClick={() => setModalImage(null)}
-              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 hover:bg-opacity-75 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold transition-colors z-10"
-              title="닫기"
-            >
-              ×
-            </button>
-            <img
-              src={modalImage}
-              alt="Paper snapshot"
-              className="max-w-full max-h-[90vh] w-auto h-auto rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
+      {paper.snapshots && paper.snapshots.length > 0 && type !== 'excluded' && (
+        <div className="mb-3 flex gap-2 overflow-x-auto">
+          {paper.snapshots.slice(0, 3).map((snapshot, idx) => (
+            <img key={idx} src={snapshot} alt="" className="h-24 w-auto rounded border border-gray-200 dark:border-gray-700 cursor-pointer" onClick={() => setModalImage(snapshot)} />
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-3 text-sm text-gray-500 dark:text-gray-400 mb-2">
+        {paper.year && <span>{paper.year}</span>}
+        <span>인용 {paper.citationCount}</span>
+      </div>
+
+      {type !== 'excluded' && analyses[paper.paperId] && (
+        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1.5 mb-2">
+          <div><span className="font-medium">개요:</span> {analyses[paper.paperId].overview}</div>
+          <div><span className="font-medium">목표:</span> {analyses[paper.paperId].goals}</div>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {analyses[paper.paperId].keywords.map((kw, idx) => (
+              <button key={idx} onClick={() => addKeywordToSearch(kw)} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-600">{kw}</button>
+            ))}
           </div>
+        </div>
+      )}
+
+      {type !== 'excluded' && !analyses[paper.paperId] && paper.abstract && (
+        <div className="text-sm text-gray-400 italic">분석 중...</div>
+      )}
+
+      {(paper.pdfUrl || paper.url) && (
+        <a href={paper.pdfUrl ? `https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}` : paper.url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 underline">
+          논문 보기
+        </a>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-900">
+      <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+          <h1 className="text-xl font-medium text-gray-900 dark:text-white">moon-search-light</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">논문 탐색 도구</p>
+        </div>
+        <div className="flex gap-2">
+          {/* Collapsed Search Indicator (Assistant 활성시) */}
+          {assistantActive && (
+            <button
+              onClick={deactivateAssistant}
+              className="w-10 shrink-0 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-gray-600 transition-colors"
+              title="검색으로 돌아가기"
+            >
+              <span className="text-sm" style={{ writingMode: 'vertical-rl' }}>검색</span>
+              <span className="text-xl">›</span>
+            </button>
+          )}
+
+          {/* Left Column - 검색 결과 (Assistant 비활성시) 또는 선택됨/제외됨 (Assistant 활성시) */}
+          <div className="flex-1 space-y-3">
+            {!assistantActive ? (
+              <>
+                <form onSubmit={handleSearch} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="논문 검색..."
+                    className="flex-1 px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                  <button type="submit" disabled={loading} className="px-5 py-3 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded hover:bg-gray-700 dark:hover:bg-gray-300 disabled:opacity-50">
+                    {loading ? '...' : '검색'}
+                  </button>
+                </form>
+
+                {error && <div className="p-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded">{error}</div>}
+
+                <div className="flex justify-between items-center text-base">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">
+                    검색 결과 ({candidatePapers.length}개 표시{total > 0 && <span className="text-gray-400 font-normal"> / {total.toLocaleString()}개 중</span>})
+                  </span>
+                  <select value={sortBy} onChange={(e) => {
+                      const newSort = e.target.value as typeof sortBy;
+                      setSortBy(newSort);
+                      addLog('sort', `정렬 변경: ${newSort === 'relevance' ? '관련성' : newSort === 'year-desc' ? '최신순' : '인용순'}`);
+                    }} className="text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800">
+                    <option value="relevance">관련성</option>
+                    <option value="year-desc">최신순</option>
+                    <option value="citations">인용순</option>
+                  </select>
+                </div>
+
+                <div className="space-y-3 max-h-[80vh] overflow-y-auto">
+                  {sortPapers(candidatePapers, sortBy).map(paper => renderPaperCard(paper, 'candidate'))}
+                  {candidatePapers.length === 0 && !loading && <div className="text-center text-gray-400 py-8 text-base">검색어를 입력하세요</div>}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col h-[calc(100vh-140px)]">
+                {/* Assistant 활성시: 선택됨/제외됨을 왼쪽에 표시 */}
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex-1 overflow-hidden flex flex-col">
+                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    선택됨 ({selectedPapers.length})
+                  </div>
+                  <div className="space-y-3 overflow-y-auto flex-1">
+                    {selectedPapers.map(paper => renderPaperCard(paper, 'selected'))}
+                  </div>
+                </div>
+
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 mt-3 shrink-0">
+                  <button onClick={() => setExcludedExpanded(!excludedExpanded)} className="text-base text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 w-full text-left">
+                    {excludedExpanded ? '▼' : '▸'} 제외됨 ({excludedPapers.length})
+                  </button>
+                  {excludedExpanded && (
+                    <div className="mt-3 space-y-3 max-h-[25vh] overflow-y-auto">
+                      {excludedPapers.map(paper => renderPaperCard(paper, 'excluded'))}
+                      {excludedPapers.length === 0 && <div className="text-center text-gray-400 py-2 text-sm">없음</div>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - 선택됨/제외됨 (Assistant 비활성시) 또는 Assistant (활성시) */}
+          <div className="flex-1">
+            {!assistantActive ? (
+              <div className="flex flex-col h-[calc(100vh-140px)]">
+                {/* Assistant 비활성시: 선택됨/제외됨을 오른쪽에 표시 */}
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex-1 overflow-hidden flex flex-col">
+                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    선택됨 ({selectedPapers.length})
+                    {selectedPapers.length > 0 && selectedPapers.length < 3 && <span className="text-sm text-gray-400 ml-2">{3 - selectedPapers.length}개 더 필요</span>}
+                  </div>
+                  <div className="space-y-3 overflow-y-auto flex-1">
+                    {selectedPapers.map(paper => renderPaperCard(paper, 'selected'))}
+                    {selectedPapers.length === 0 && <div className="text-center text-gray-400 py-4 text-sm">← 검색 결과에서 선택</div>}
+                  </div>
+                </div>
+
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 mt-3 shrink-0">
+                  <button onClick={() => setExcludedExpanded(!excludedExpanded)} className="text-base text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 w-full text-left">
+                    {excludedExpanded ? '▼' : '▸'} 제외됨 ({excludedPapers.length})
+                  </button>
+                  {excludedExpanded && (
+                    <div className="mt-3 space-y-3 max-h-[25vh] overflow-y-auto">
+                      {excludedPapers.map(paper => renderPaperCard(paper, 'excluded'))}
+                      {excludedPapers.length === 0 && <div className="text-center text-gray-400 py-2 text-sm">없음</div>}
+                    </div>
+                  )}
+                </div>
+
+                {/* 분석 시작 버튼 */}
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-5 text-center mt-3 shrink-0">
+                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">Research Assistant</div>
+                  {canActivateAssistant ? (
+                    <button onClick={activateAssistant} className="px-5 py-2.5 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded hover:bg-gray-700 dark:hover:bg-gray-300">
+                      분석 시작
+                    </button>
+                  ) : (
+                    <div className="text-sm text-gray-400">{3 - selectedPapers.length}개 더 선택 필요</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Assistant 활성시: 오른쪽에 Assistant 표시 */}
+                {/* Activity Log */}
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-4">
+                  <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">활동 이력</div>
+                  <div className="h-32 overflow-y-auto space-y-1.5">
+                    {activityLogs.length === 0 ? (
+                      <div className="text-sm text-gray-400 text-center py-4">검색을 시작하세요</div>
+                    ) : (
+                      activityLogs.map((log) => (
+                        <div key={log.id} className="text-sm text-gray-500 dark:text-gray-400 flex gap-2">
+                          <span className="text-gray-400 shrink-0">{log.time.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                          <span className={
+                            log.type === 'select' ? 'text-gray-700 dark:text-gray-300' :
+                            log.type === 'exclude' ? 'text-gray-500' :
+                            ''
+                          }>{log.message}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Assistant Panel - Chat Only */}
+                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex flex-col h-[60vh] mt-3">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-base font-medium text-gray-700 dark:text-gray-300">Research Assistant</span>
+                    <div className="flex gap-2">
+                      {chatMessages.length > 1 && (
+                        <button onClick={downloadResearchOverview} className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 dark:border-gray-600 px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                          다운로드
+                        </button>
+                      )}
+                      <button onClick={deactivateAssistant} className="text-sm text-gray-400 hover:text-gray-600">← 검색으로</button>
+                    </div>
+                  </div>
+
+                  {/* Chat Messages */}
+                  <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+                    {chatMessages.map((msg, idx) => (
+                      <div key={idx} className={`text-base p-4 rounded whitespace-pre-wrap leading-relaxed ${msg.role === 'user' ? 'bg-gray-100 dark:bg-gray-800 ml-8' : 'bg-gray-50 dark:bg-gray-700 mr-8'}`}>
+                        {msg.content}
+                      </div>
+                    ))}
+                    {chatLoading && <div className="text-base text-gray-400 p-4">응답 중...</div>}
+                  </div>
+
+                  {/* Chat Input */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendChatMessage()}
+                      placeholder="메시지를 입력하세요..."
+                      className="flex-1 px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800"
+                      disabled={chatLoading}
+                    />
+                    <button onClick={sendChatMessage} disabled={chatLoading} className="px-5 py-3 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded disabled:opacity-50">
+                      전송
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Collapsed Assistant Indicator (Assistant 비활성시) */}
+          {!assistantActive && (
+            <div
+              className={`w-10 shrink-0 border border-gray-200 dark:border-gray-700 rounded flex flex-col items-center justify-center gap-1 transition-colors ${
+                canActivateAssistant
+                  ? 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 cursor-pointer'
+                  : 'bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600'
+              }`}
+              onClick={canActivateAssistant ? activateAssistant : undefined}
+              title={canActivateAssistant ? '분석 시작' : `${3 - selectedPapers.length}개 더 선택 필요`}
+            >
+              <span className="text-xl">‹</span>
+              <span className="text-sm" style={{ writingMode: 'vertical-rl' }}>Assistant</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal */}
+      {modalImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75" onClick={() => setModalImage(null)}>
+          <img src={modalImage} alt="" className="max-w-full max-h-[90vh] rounded" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>
