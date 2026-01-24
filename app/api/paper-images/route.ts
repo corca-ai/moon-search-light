@@ -70,7 +70,7 @@ function parseCSV(csvContent: string): Map<string, { pdfUrl: string; snapshots: 
 
           if (snapshots.length > 0 || fullPdfUrl) {
             // 제목을 정규화하여 키로 사용
-            const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+            const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
             paperImages.set(normalizedTitle, { pdfUrl: fullPdfUrl, snapshots });
           }
         }
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     // 각 제목에 대해 스냅샷, PDF URL 찾기
     for (const title of titles) {
-      const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
       const imageData = paperImages.get(normalizedTitle);
 
       if (imageData && (imageData.snapshots.length > 0 || imageData.pdfUrl)) {
