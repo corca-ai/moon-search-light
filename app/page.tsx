@@ -12,8 +12,9 @@ interface PaperAnalysis {
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
+  timestamp?: number;
 }
 
 interface ActivityLog {
@@ -41,8 +42,11 @@ export default function Home() {
   const [assistantActive, setAssistantActive] = useState(false);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [logIdCounter, setLogIdCounter] = useState(0);
+  const [analyzedPaperIds, setAnalyzedPaperIds] = useState<string[]>([]);
+  const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
 
   const addLog = (type: ActivityLog['type'], message: string) => {
+    const now = Date.now();
     setActivityLogs(prev => [{
       id: logIdCounter,
       time: new Date(),
@@ -50,6 +54,11 @@ export default function Home() {
       message,
     }, ...prev].slice(0, 50)); // 최대 50개 유지
     setLogIdCounter(prev => prev + 1);
+
+    // Assistant 활성 시 채팅에도 시스템 메시지로 추가
+    if (assistantActive) {
+      setChatMessages(prev => [...prev, { role: 'system', content: message, timestamp: now }]);
+    }
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -143,6 +152,12 @@ export default function Home() {
 
   const fetchAnalysis = async (paper: Paper) => {
     if (!paper.abstract || analyses[paper.paperId]) return;
+
+    // 이미 요약 중인 논문은 건너뛰기
+    if (summarizingIds.has(paper.paperId)) return;
+
+    setSummarizingIds(prev => new Set(prev).add(paper.paperId));
+
     try {
       const response = await fetch('/api/summarize', {
         method: 'POST',
@@ -155,6 +170,12 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to fetch analysis:', err);
+    } finally {
+      setSummarizingIds(prev => {
+        const next = new Set(prev);
+        next.delete(paper.paperId);
+        return next;
+      });
     }
   };
 
@@ -167,15 +188,48 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const leftPapers = [...selectedPapers, ...candidatePapers];
-    if (leftPapers.length > 0) processPapersInBatches(leftPapers);
-  }, [selectedPapers, candidatePapers]);
+    // 요약 중인 논문이 있으면 대기
+    if (summarizingIds.size > 0) return;
+
+    if (assistantActive) {
+      // Assistant 활성 시: 선택된 논문만 요약
+      const unsummarizedSelected = selectedPapers.filter(
+        p => p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId)
+      );
+      if (unsummarizedSelected.length > 0) {
+        processPapersInBatches(unsummarizedSelected);
+      }
+    } else {
+      // Assistant 비활성 시: 선택된 논문 전체 + 정렬 기준으로 상위 5개
+      const unsummarizedSelected = selectedPapers.filter(
+        p => p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId)
+      );
+      const sortedCandidates = sortPapers(candidatePapers, sortBy);
+      const unsummarizedCandidates = sortedCandidates.filter(
+        p => p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId)
+      );
+      const papersToSummarize = [...unsummarizedSelected, ...unsummarizedCandidates.slice(0, 3)];
+      if (papersToSummarize.length > 0) {
+        processPapersInBatches(papersToSummarize);
+      }
+    }
+  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds]);
 
   const canActivateAssistant = selectedPapers.length >= 3;
 
   const activateAssistant = async () => {
     if (!canActivateAssistant) return;
     setAssistantActive(true);
+
+    // 이미 분석된 논문들과 동일한지 확인
+    const currentPaperIds = selectedPapers.map(p => p.paperId).sort().join(',');
+    const previousPaperIds = analyzedPaperIds.sort().join(',');
+
+    // 동일한 논문이면 기존 대화 유지
+    if (currentPaperIds === previousPaperIds && chatMessages.length > 0) {
+      return;
+    }
+
     setChatLoading(true);
 
     // 선택된 논문 목록 표시
@@ -222,11 +276,13 @@ ${summary.researchLandscape}
 - "연구 계획서 초안을 작성해줘"`;
 
         setChatMessages([{ role: 'assistant', content: contextMessage }]);
+        setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
       } else {
         setChatMessages([{
           role: 'assistant',
           content: `선택하신 ${selectedPapers.length}개의 논문을 분석할 준비가 되었습니다.\n\n${paperList}\n\n무엇을 도와드릴까요?`,
         }]);
+        setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
       }
     } catch (err) {
       console.error('Failed to generate context:', err);
@@ -234,6 +290,7 @@ ${summary.researchLandscape}
         role: 'assistant',
         content: `선택하신 ${selectedPapers.length}개의 논문을 분석할 준비가 되었습니다.\n\n${paperList}\n\n무엇을 도와드릴까요?`,
       }]);
+      setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
     } finally {
       setChatLoading(false);
     }
@@ -241,11 +298,15 @@ ${summary.researchLandscape}
 
   const deactivateAssistant = () => {
     setAssistantActive(false);
-    setChatMessages([]);
+    // 대화 내용 유지 (재활성화 시 기억)
   };
 
   useEffect(() => {
-    if (selectedPapers.length < 3 && assistantActive) deactivateAssistant();
+    if (selectedPapers.length < 3 && assistantActive) {
+      deactivateAssistant();
+      setChatMessages([]);
+      setAnalyzedPaperIds([]);
+    }
   }, [selectedPapers.length]);
 
   const sendChatMessage = async () => {
@@ -387,6 +448,8 @@ ${summary.researchLandscape}
         <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1.5 mb-2">
           <div><span className="font-medium">개요:</span> {analyses[paper.paperId].overview}</div>
           <div><span className="font-medium">목표:</span> {analyses[paper.paperId].goals}</div>
+          <div><span className="font-medium">방법론:</span> {analyses[paper.paperId].method}</div>
+          <div><span className="font-medium">결과:</span> {analyses[paper.paperId].results}</div>
           <div className="flex flex-wrap gap-1.5 mt-2">
             {analyses[paper.paperId].keywords.map((kw, idx) => (
               <button key={idx} onClick={() => addKeywordToSearch(kw)} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm hover:bg-gray-200 dark:hover:bg-gray-600">{kw}</button>
@@ -541,48 +604,31 @@ ${summary.researchLandscape}
                 </div>
               </div>
             ) : (
-              <>
-                {/* Assistant 활성시: 오른쪽에 Assistant 표시 */}
-                {/* Activity Log */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-4">
-                  <div className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">활동 이력</div>
-                  <div className="h-32 overflow-y-auto space-y-1.5">
-                    {activityLogs.length === 0 ? (
-                      <div className="text-sm text-gray-400 text-center py-4">검색을 시작하세요</div>
-                    ) : (
-                      activityLogs.map((log) => (
-                        <div key={log.id} className="text-sm text-gray-500 dark:text-gray-400 flex gap-2">
-                          <span className="text-gray-400 shrink-0">{log.time.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                          <span className={
-                            log.type === 'select' ? 'text-gray-700 dark:text-gray-300' :
-                            log.type === 'exclude' ? 'text-gray-500' :
-                            ''
-                          }>{log.message}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+              <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex flex-col h-[calc(100vh-140px)]">
+                {/* Assistant Panel Header */}
+                <div className="flex justify-between items-center mb-4 shrink-0">
+                  <span className="text-base font-medium text-gray-700 dark:text-gray-300">Research Assistant</span>
+                  <button onClick={deactivateAssistant} className="text-sm text-gray-400 hover:text-gray-600">← 검색으로</button>
                 </div>
 
-                {/* Assistant Panel - Chat Only */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex flex-col h-[60vh] mt-3">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-base font-medium text-gray-700 dark:text-gray-300">Research Assistant</span>
-                    <button onClick={deactivateAssistant} className="text-sm text-gray-400 hover:text-gray-600">← 검색으로</button>
-                  </div>
-
-                  {/* Chat Messages */}
-                  <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                    {chatMessages.map((msg, idx) => (
-                      <div key={idx} className={`text-base p-4 rounded whitespace-pre-wrap leading-relaxed ${msg.role === 'user' ? 'bg-gray-100 dark:bg-gray-800 ml-8' : 'bg-gray-50 dark:bg-gray-700 mr-8'}`}>
-                        {msg.content}
-                      </div>
-                    ))}
-                    {chatLoading && <div className="text-base text-gray-400 p-4">응답 중...</div>}
-                  </div>
+                {/* Chat Messages */}
+                <div className="flex-1 overflow-y-auto space-y-3">
+                  {chatMessages.map((msg, idx) => (
+                    <div key={idx} className={`rounded whitespace-pre-wrap leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'text-base p-4 bg-gray-100 dark:bg-gray-800 ml-8'
+                        : msg.role === 'system'
+                        ? 'text-sm p-2 text-gray-500 dark:text-gray-400 text-center'
+                        : 'text-base p-4 bg-gray-50 dark:bg-gray-700 mr-8'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  ))}
+                  {chatLoading && <div className="text-base text-gray-400 p-4">응답 중...</div>}
+                </div>
 
                   {/* Chat Input */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mt-auto pt-4 shrink-0">
                     <input
                       type="text"
                       value={chatInput}
@@ -597,7 +643,6 @@ ${summary.researchLandscape}
                     </button>
                   </div>
                 </div>
-              </>
             )}
           </div>
 
