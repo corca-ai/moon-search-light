@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import type { Paper } from './api/search/route';
 
 interface PaperAnalysis {
-  summary: string;
+  overview: string;
+  goals: string;
+  method: string;
+  results: string;
   keywords: string[];
 }
 
@@ -302,13 +305,42 @@ export default function Home() {
 
                     {analyses[paper.paperId] ? (
                       <>
-                        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">
-                            요약 (AI)
+                        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded space-y-2">
+                          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            분석 (AI)
                           </div>
-                          <p className="text-sm text-gray-700 dark:text-gray-300">
-                            {analyses[paper.paperId].summary}
-                          </p>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              개요
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].overview}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              연구 목표
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].goals}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              방법론
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].method}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              결과
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].results}
+                            </p>
+                          </div>
                         </div>
                         <div className="mb-3">
                           <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
@@ -404,13 +436,42 @@ export default function Home() {
 
                     {analyses[paper.paperId] ? (
                       <>
-                        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">
-                            요약 (AI)
+                        <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded space-y-2">
+                          <div className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                            분석 (AI)
                           </div>
-                          <p className="text-sm text-gray-700 dark:text-gray-300">
-                            {analyses[paper.paperId].summary}
-                          </p>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              개요
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].overview}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              연구 목표
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].goals}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              방법론
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].method}
+                            </p>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                              결과
+                            </div>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {analyses[paper.paperId].results}
+                            </p>
+                          </div>
                         </div>
                         <div className="mb-3">
                           <div className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
