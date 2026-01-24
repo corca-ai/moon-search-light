@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+// URL prefix 상수
+const SNAPSHOT_PREFIX = 'https://moonlight-paper-snapshot.s3.ap-northeast-2.amazonaws.com/arxiv/';
+const PDF_PREFIX = 'http://arxiv.org/pdf/';
+
 interface PaperImageData {
   title: string;
-  authors: string[];
   slug: string;
   pdfUrl: string;
   snapshots: string[];
 }
 
-// CSV 파일을 읽고 파싱하는 함수
+// CSV 파일을 읽고 파싱하는 함수 (최적화된 형식: title,slug,pdf_url,snapshots)
 function parseCSV(csvContent: string): Map<string, { slug: string; pdfUrl: string; snapshots: string[] }> {
   const lines = csvContent.split('\n');
   const paperImages = new Map<string, { slug: string; pdfUrl: string; snapshots: string[] }>();
@@ -33,42 +36,46 @@ function parseCSV(csvContent: string): Map<string, { slug: string; pdfUrl: strin
 
     if (!insideQuotes) {
       try {
-        // CSV 라인 파싱: title,authors,slug,pdf_url,snapshots
+        // CSV 라인 파싱: title,slug,pdf_url,snapshots
         let title = '';
         let slug = '';
         let pdfUrl = '';
         let snapshotsStr = '';
 
-        // 패턴 1: 따옴표로 감싸진 제목 "title","authors","slug","pdf_url","snapshots"
-        let match = currentLine.match(/^"([^"]*(?:""[^"]*)*)","(\{[^}]*\})","?([^,]*)"?,("?[^,]*"?),("?\{[^}]*\}"?)$/);
+        // 패턴 1: 따옴표로 감싸진 제목 "title",slug,pdf_url,"snapshots"
+        let match = currentLine.match(/^"([^"]*(?:""[^"]*)*)","?([^,]*)"?,([^,]*),("?\{[^}]*\}"?)$/);
         if (match) {
           title = match[1].replace(/""/g, '"').replace(/\s+/g, ' ').trim();
-          slug = match[3].replace(/^"|"$/g, '').trim();
-          pdfUrl = match[4].replace(/^"|"$/g, '').trim();
-          snapshotsStr = match[5].replace(/^"|"$/g, ''); // 앞뒤 따옴표 제거
+          slug = match[2].replace(/^"|"$/g, '').trim();
+          pdfUrl = match[3].replace(/^"|"$/g, '').trim();
+          snapshotsStr = match[4].replace(/^"|"$/g, '');
         } else {
-          // 패턴 2: 따옴표 없는 제목 title,"authors","slug","pdf_url","snapshots"
-          match = currentLine.match(/^([^,]+),"(\{[^}]*\})","?([^,]*)"?,("?[^,]*"?),("?\{[^}]*\}"?)$/);
+          // 패턴 2: 따옴표 없는 제목 title,slug,pdf_url,snapshots
+          match = currentLine.match(/^([^,]+),([^,]*),([^,]*),("?\{[^}]*\}"?)$/);
           if (match) {
             title = match[1].replace(/\s+/g, ' ').trim();
-            slug = match[3].replace(/^"|"$/g, '').trim();
-            pdfUrl = match[4].replace(/^"|"$/g, '').trim();
-            snapshotsStr = match[5].replace(/^"|"$/g, '');
+            slug = match[2].trim();
+            pdfUrl = match[3].trim();
+            snapshotsStr = match[4].replace(/^"|"$/g, '');
           }
         }
 
         if (title && snapshotsStr) {
-          // snapshots 배열 파싱
+          // snapshots 배열 파싱 및 전체 URL 복원
           const snapshots = snapshotsStr
             .slice(1, -1) // { } 제거
             .split(',')
             .map(url => url.trim())
-            .filter(url => url.length > 0);
+            .filter(url => url.length > 0)
+            .map(url => url.startsWith('http') ? url : SNAPSHOT_PREFIX + url);
 
-          if (snapshots.length > 0 || pdfUrl || slug) {
+          // pdf_url 전체 URL 복원
+          const fullPdfUrl = pdfUrl.startsWith('http') ? pdfUrl : (pdfUrl ? PDF_PREFIX + pdfUrl : '');
+
+          if (snapshots.length > 0 || fullPdfUrl || slug) {
             // 제목을 정규화하여 키로 사용
             const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-            paperImages.set(normalizedTitle, { slug, pdfUrl, snapshots });
+            paperImages.set(normalizedTitle, { slug, pdfUrl: fullPdfUrl, snapshots });
           }
         }
       } catch (e) {
