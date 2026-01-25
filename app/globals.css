@@ -5,14 +5,14 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
+  --background: #f8fafc;
+  --foreground: #1e293b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0f172a;
-    --foreground: #f1f5f9;
+    --foreground: #e2e8f0;
   }
 }
 
@@ -22,6 +22,8 @@ body {
   font-family: 'Pretendard Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+  letter-spacing: -0.01em;
 }
 
 @layer utilities {
@@ -30,21 +32,21 @@ body {
   }
 
   .animate-fade-in {
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeIn 0.15s ease-out;
   }
 
   .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.2s ease-out;
   }
 
   .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
+    animation: scaleIn 0.15s ease-out;
   }
 
   @keyframes fadeIn {
     from {
       opacity: 0;
-      transform: translateY(4px);
+      transform: translateY(2px);
     }
     to {
       opacity: 1;
@@ -55,7 +57,7 @@ body {
   @keyframes slideUp {
     from {
       opacity: 0;
-      transform: translateY(12px);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
@@ -66,7 +68,7 @@ body {
   @keyframes scaleIn {
     from {
       opacity: 0;
-      transform: scale(0.95);
+      transform: scale(0.98);
     }
     to {
       opacity: 1;
@@ -85,12 +87,12 @@ body {
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background: #94a3b8;
     border-radius: 3px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #64748b;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -102,4 +104,47 @@ body {
       background: #64748b;
     }
   }
+}
+
+/* Typography improvements for academic feel */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Prose customization for chat */
+.prose {
+  --tw-prose-body: #334155;
+  --tw-prose-headings: #1e293b;
+  --tw-prose-links: #475569;
+  --tw-prose-bold: #1e293b;
+  --tw-prose-counters: #64748b;
+  --tw-prose-bullets: #94a3b8;
+  --tw-prose-hr: #e2e8f0;
+  --tw-prose-quotes: #475569;
+  --tw-prose-quote-borders: #cbd5e1;
+  --tw-prose-captions: #64748b;
+  --tw-prose-code: #1e293b;
+  --tw-prose-pre-code: #e2e8f0;
+  --tw-prose-pre-bg: #1e293b;
+  --tw-prose-th-borders: #cbd5e1;
+  --tw-prose-td-borders: #e2e8f0;
+}
+
+.dark .prose {
+  --tw-prose-body: #cbd5e1;
+  --tw-prose-headings: #f1f5f9;
+  --tw-prose-links: #94a3b8;
+  --tw-prose-bold: #f1f5f9;
+  --tw-prose-counters: #94a3b8;
+  --tw-prose-bullets: #64748b;
+  --tw-prose-hr: #334155;
+  --tw-prose-quotes: #94a3b8;
+  --tw-prose-quote-borders: #475569;
+  --tw-prose-captions: #94a3b8;
+  --tw-prose-code: #f1f5f9;
+  --tw-prose-pre-code: #e2e8f0;
+  --tw-prose-pre-bg: #1e293b;
+  --tw-prose-th-borders: #475569;
+  --tw-prose-td-borders: #334155;
 }

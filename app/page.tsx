@@ -600,7 +600,7 @@ ${summary.researchLandscape}
                   const sortLabels: Record<string, string> = { relevance: '관련성', recommended: '추천순', 'year-desc': '최신순', citations: '인용순' };
                   addSystemMessage(`정렬 변경: ${sortLabels[newSort]}`);
                 }}
-                className={`text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 ${styles.text.secondary} focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all`}
+                className={`text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 ${styles.text.secondary} focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all`}
               >
                 <option value="recommended">추천순</option>
                 <option value="relevance">관련성</option>
@@ -682,9 +682,9 @@ ${summary.researchLandscape}
                 {chatLoading && (
                   <div className={`text-sm ${styles.text.muted} p-4 flex items-center gap-3`}>
                     <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                     </div>
                     응답 중...
                   </div>

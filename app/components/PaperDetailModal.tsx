@@ -93,12 +93,12 @@ export function PaperDetailModal({
                 )}
                 {isTranslating && (
                   <span className={`text-xs ${styles.text.muted} flex items-center gap-2`}>
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+                    <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-pulse"></span>
                     번역 중...
                   </span>
                 )}
                 {translation && (
-                  <div className="mt-3 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl">
+                  <div className="mt-3 p-4 bg-slate-100 dark:bg-slate-800 rounded-xl">
                     <div className={`text-xs ${styles.text.accent} font-medium mb-2`}>번역</div>
                     <p className={`text-sm ${styles.text.secondary} leading-relaxed`}>{translation}</p>
                   </div>

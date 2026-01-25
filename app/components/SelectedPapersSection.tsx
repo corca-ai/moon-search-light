@@ -32,7 +32,7 @@ export function SelectedPapersSection({
           <span className={`text-sm font-semibold ${styles.text.secondary}`}>
             선택됨
           </span>
-          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${selectedPapers.length > 0 ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${selectedPapers.length > 0 ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
             {selectedPapers.length}
           </span>
         </div>

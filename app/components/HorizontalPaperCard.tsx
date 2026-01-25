@@ -18,7 +18,7 @@ export function HorizontalPaperCard({ paper, type, onAction, onShowDetail }: Hor
           className={`flex-1 min-w-0 ${onShowDetail ? 'cursor-pointer group' : ''}`}
           onClick={() => onShowDetail?.(paper)}
         >
-          <h3 className={`text-sm font-medium ${styles.text.primary} leading-snug line-clamp-2 ${onShowDetail ? 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors' : ''}`}>
+          <h3 className={`text-sm font-medium ${styles.text.primary} leading-snug line-clamp-2 ${onShowDetail ? 'group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors' : ''}`}>
             {paper.title}
           </h3>
           <div className={`flex items-center gap-2 text-xs ${styles.text.muted} mt-2`}>

@@ -100,7 +100,7 @@ export function SearchResultCard({
         {!analysis && paper.abstract && (
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse"></div>
               <span className={`text-xs ${styles.text.accent} font-medium`}>분석 중...</span>
             </div>
             <p className={`text-sm ${styles.text.tertiary} leading-relaxed`}>{paper.abstract}</p>
@@ -133,12 +133,12 @@ export function SearchResultCard({
                     )}
                     {isTranslating && (
                       <span className={`text-xs ${styles.text.muted} flex items-center gap-2`}>
-                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+                        <span className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-pulse"></span>
                         번역 중...
                       </span>
                     )}
                     {translation && (
-                      <div className="mt-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                      <div className="mt-3 p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
                         <div className={`text-xs ${styles.text.accent} font-medium mb-2`}>번역</div>
                         <p className={`text-sm ${styles.text.secondary} leading-relaxed`}>{translation}</p>
                       </div>
