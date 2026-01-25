@@ -35,29 +35,39 @@ export function PaperDetailModal({
     : paper.url;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
       <div
-        className="bg-white dark:bg-gray-900 rounded-lg max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto"
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[85vh] overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
-        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-start gap-4">
+        <div className={`sticky top-0 bg-white dark:bg-slate-900 border-b ${styles.divider} p-5 flex justify-between items-start gap-4`}>
           <h2 className={`text-lg font-semibold ${styles.text.primary} leading-relaxed flex-1`}>
             {paper.title}
           </h2>
-          <button onClick={onClose} className={`${styles.button.icon} text-lg`}>×</button>
+          <button
+            onClick={onClose}
+            className={`${styles.button.icon} shrink-0`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         {/* 콘텐츠 */}
-        <div className="p-4 space-y-4">
+        <div className="p-5 space-y-5 overflow-y-auto max-h-[calc(85vh-80px)] scrollbar-thin">
           {/* 메타 정보 */}
           <div className={`flex items-center gap-3 text-sm ${styles.text.tertiary}`}>
             {paper.year && <span className="font-medium">{paper.year}</span>}
-            {paper.year && <span className="text-gray-300 dark:text-gray-600">•</span>}
+            {paper.year && <span className="text-slate-300 dark:text-slate-600">•</span>}
             <span>인용 {paper.citationCount?.toLocaleString()}</span>
             {paperLink && (
               <>
-                <span className="text-gray-300 dark:text-gray-600">•</span>
+                <span className="text-slate-300 dark:text-slate-600">•</span>
                 <a href={paperLink} target="_blank" rel="noopener noreferrer" className={styles.text.link}>
                   논문 보기 →
                 </a>
@@ -67,8 +77,8 @@ export function PaperDetailModal({
 
           {/* 초록 */}
           {paper.abstract && (
-            <div className="space-y-2">
-              <h3 className={`text-sm font-medium ${styles.text.secondary}`}>초록</h3>
+            <div className="space-y-3">
+              <h3 className={`text-sm font-semibold ${styles.text.secondary}`}>초록</h3>
               <p className={`text-sm ${styles.text.tertiary} leading-relaxed`}>{paper.abstract}</p>
 
               {/* 번역 */}
@@ -76,17 +86,20 @@ export function PaperDetailModal({
                 {!translation && !isTranslating && (
                   <button
                     onClick={() => onTranslate(paper.paperId, paper.abstract!)}
-                    className="text-xs text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    className={`text-xs ${styles.text.link}`}
                   >
                     한국어로 번역
                   </button>
                 )}
                 {isTranslating && (
-                  <span className={`text-xs ${styles.text.muted}`}>번역 중...</span>
+                  <span className={`text-xs ${styles.text.muted} flex items-center gap-2`}>
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+                    번역 중...
+                  </span>
                 )}
                 {translation && (
-                  <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded">
-                    <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">번역</div>
+                  <div className="mt-3 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl">
+                    <div className={`text-xs ${styles.text.accent} font-medium mb-2`}>번역</div>
                     <p className={`text-sm ${styles.text.secondary} leading-relaxed`}>{translation}</p>
                   </div>
                 )}
@@ -96,20 +109,25 @@ export function PaperDetailModal({
 
           {/* AI 분석 결과 */}
           {analysis ? (
-            <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-              <h3 className={`text-sm font-medium ${styles.text.secondary}`}>AI 분석</h3>
+            <div className={`space-y-4 pt-4 border-t ${styles.divider}`}>
+              <h3 className={`text-sm font-semibold ${styles.text.secondary} flex items-center gap-2`}>
+                <svg className={`w-4 h-4 ${styles.text.accent}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI 분석
+              </h3>
 
-              <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 text-sm">
-                <span className={styles.text.muted}>개요</span>
+              <div className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-3 text-sm">
+                <span className={`${styles.text.muted} font-medium`}>개요</span>
                 <span className={`${styles.text.secondary} leading-relaxed`}>{analysis.overview}</span>
 
-                <span className={styles.text.muted}>목표</span>
+                <span className={`${styles.text.muted} font-medium`}>목표</span>
                 <span className={`${styles.text.secondary} leading-relaxed`}>{analysis.goals}</span>
 
-                <span className={styles.text.muted}>방법론</span>
+                <span className={`${styles.text.muted} font-medium`}>방법론</span>
                 <span className={`${styles.text.secondary} leading-relaxed`}>{analysis.method}</span>
 
-                <span className={styles.text.muted}>결과</span>
+                <span className={`${styles.text.muted} font-medium`}>결과</span>
                 <span className={`${styles.text.secondary} leading-relaxed`}>{analysis.results}</span>
               </div>
 
@@ -123,7 +141,7 @@ export function PaperDetailModal({
               )}
             </div>
           ) : (
-            <div className={`text-sm ${styles.text.muted} pt-2 border-t border-gray-200 dark:border-gray-700`}>
+            <div className={`text-sm ${styles.text.muted} pt-4 border-t ${styles.divider}`}>
               분석 결과가 없습니다.
             </div>
           )}
