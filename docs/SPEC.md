@@ -13,10 +13,11 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 
 ### 1.2 핵심 가치
 - **효율적인 검색**: Semantic Scholar 2억 건 이상 논문 데이터베이스 검색
+- **스마트 정렬**: 추천순(최신 연구 우선 + 인용수 반영)
 - **AI 요약**: 구조화된 한국어 논문 요약 (개요, 목표, 방법론, 결과)
 - **초록 번역**: 영문 초록 한국어 번역 지원
 - **관심 주제 분석**: 선택/제외 패턴 기반 연구 관심사 자동 분석
-- **Research Assistant**: AI 대화를 통한 후속 연구 아이디어 도출
+- **Research Assistant**: AI 대화를 통한 후속 연구 아이디어 도출 (마크다운 렌더링)
 - **통합 컨텍스트 분석**: 복수 논문의 공통점, 차이점, 연구 지형 분석
 - **시각적 프리뷰**: ArXiv 논문 스냅샷 이미지 제공
 - **Moonlight 연동**: ArXiv 논문을 Moonlight 뷰어에서 열람
@@ -44,19 +45,19 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 ### 2.3 선택됨 영역 (상단)
 - **선택된 논문**: 수평 스크롤 카드 목록
 - **제외됨**: 접기/펼치기 토글 (▸/▼)
-- **관심 주제 요약**: AI 분석 결과 표시
-  - "당신이 관심을 갖는 주제는 ... 인 것 같습니다." 형식
+- **관심 주제 요약**: AI 분석 결과 표시 (명사형 종결)
 
 ### 2.4 검색/Assistant 영역 (하단)
 
 **Assistant 비활성 시**
-- 검색창 + Semantic Scholar 설명
+- 검색창 (검색 아이콘 포함) + Semantic Scholar 설명
 - 검색 결과 헤더 (개수 + 정렬 옵션)
 - 검색 결과 카드 목록
 
 **Assistant 활성 시**
 - Research Assistant 채팅 인터페이스
-- 채팅 메시지 + 입력창
+- 마크다운 렌더링 지원
+- 타이핑 인디케이터 애니메이션
 
 ---
 
@@ -72,9 +73,33 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 - 화면에는 상위 20개 논문 표시
 
 ### 3.3 정렬 옵션
-- 관련성 (기본)
-- 최신순
-- 인용순
+
+| 옵션 | 설명 |
+|------|------|
+| **추천순** (기본) | 최신 연구 우선 + 인용수 반영 |
+| 관련성 | Semantic Scholar 기본 관련성 |
+| 최신순 | 발행 연도 내림차순 |
+| 인용순 | 인용수 내림차순 |
+
+### 3.4 추천순 정렬 알고리즘
+
+**연도 가중치 (60%)**
+| 구간 | 가중치 |
+|------|--------|
+| 0-1년 | 1.0 |
+| 1-5년 | 0.8 |
+| 5-10년 | 0.5 |
+| 10-15년 | 0.25 |
+| 15년+ | 0.1 |
+
+**인용수 가중치 (40%)**
+- 로그 스케일로 정규화: `log10(citations + 1) / 5`
+- 고인용 논문도 상위 노출 보장
+
+**종합 점수**
+```
+score = yearScore * 0.6 + citationScore * 0.4
+```
 
 ---
 
@@ -82,33 +107,36 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 
 ### 4.1 검색 결과 카드 (수직 목록)
 - **썸네일** (왼쪽, 이미지 있을 때만 표시)
-- **헤더**: 논문 제목 + 액션 버튼 (☆, ×)
+- **헤더**: 논문 제목 + 액션 버튼 (⭐, ✕)
 - **메타 정보**: 발행 연도 · 인용 수 · 논문 보기 링크
-- **분석 중 상태**: 초록 표시 + "분석 중..." 라벨
+- **분석 중 상태**: 초록 표시 + 펄스 애니메이션
 - **분석 완료 상태**:
-  - 접을 수 있는 초록 (▸ 초록 보기 / ▾ 초록 접기)
+  - 접을 수 있는 초록 (화살표 아이콘)
   - 초록 번역 버튼 (한국어로 번역)
   - AI 분석 결과 (개요, 목표, 방법론, 결과)
-  - 키워드 태그
+  - 키워드 태그 (indigo 색상)
 
 ### 4.2 선택된/제외된 카드 (수평 스크롤)
 - 간결한 카드 형태 (너비 288px)
-- 논문 제목
+- 논문 제목 (2줄 제한)
 - 발행 연도 · 인용 수
 - 액션 버튼 (★ 또는 복원)
 - **클릭 시 상세 모달 표시**
+- hover 시 제목 색상 변경
 
 ### 4.3 논문 상세 모달
+- backdrop-blur 배경
 - 제목, 연도, 인용수, 논문 링크
 - 초록 + 번역 기능
 - AI 분석 결과
 - 키워드 태그
+- scale 애니메이션
 
 ### 4.4 액션 버튼
 | 영역 | 버튼 | 동작 |
 |------|------|------|
-| 검색 결과 | ☆ | 선택됨으로 이동 |
-| 검색 결과 | × | 제외됨으로 이동 |
+| 검색 결과 | ⭐ | 선택됨으로 이동 |
+| 검색 결과 | ✕ | 제외됨으로 이동 |
 | 선택됨 | ★ | 검색 결과로 복귀 |
 | 제외됨 | 복원 | 검색 결과로 복귀 |
 
@@ -126,7 +154,7 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 
 ### 5.2 요약 처리 방식
 - 배치 크기: 3개씩 순차 처리
-- 정렬 기준(관련성/최신순/인용순)에 따라 상위부터 처리
+- 정렬 기준에 따라 상위부터 처리
 - **Assistant 비활성 시**: 선택된 논문 전체 + 정렬 기준 상위 3개
 - **Assistant 활성 시**: 선택된 논문만 요약
 
@@ -136,7 +164,7 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 
 ### 5.4 초록 번역
 - "한국어로 번역" 버튼 클릭 시 GPT로 번역
-- 번역 결과 초록 아래 표시
+- 번역 결과 초록 아래 표시 (indigo 배경)
 
 ---
 
@@ -147,13 +175,15 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 - 선택된 논문 제목 + 제외된 논문 제목 분석
 
 ### 6.2 표시 형식
-- "당신이 관심을 갖는 주제는 ... 인 것 같습니다." 형식
+- **명사형 종결** (추측성 어미 사용 안 함)
+- 100글자 이하 간결한 요약
 - 구체적인 기술/방법론/도메인 명시
 - 제외된 논문이 있으면 대비하여 표현
+- 예: "전통적인 CNN보다는 Vision Transformer를 활용한 이미지 분류"
 
 ### 6.3 위치
 - 선택됨 영역 하단
-- "관심 주제 요약" 라벨과 함께 표시
+- 전구 아이콘 + "관심 주제 요약" 라벨
 
 ---
 
@@ -176,11 +206,13 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
   - 연구 지형
 
 ### 7.3 채팅 기능
-AI와 자유로운 대화를 통해:
-- 논문 비교 분석
-- Research Gap 식별
-- 후속 연구 아이디어 제안
-- 연구 계획서 작성 지원
+- **마크다운 렌더링 지원** (react-markdown + @tailwindcss/typography)
+- AI와 자유로운 대화를 통해:
+  - 논문 비교 분석
+  - Research Gap 식별
+  - 후속 연구 아이디어 제안
+  - 연구 계획서 작성 지원
+- 타이핑 인디케이터 (바운스 애니메이션)
 
 ### 7.4 연구 개요 다운로드
 - 헤더 영역에 "연구 개요 다운로드" 버튼
@@ -205,7 +237,7 @@ AI와 자유로운 대화를 통해:
 
 ### 8.2 표시 방식
 - 카드 왼쪽에 썸네일 (이미지 있을 때만)
-- 클릭 시 전체 화면 모달로 확대
+- 클릭 시 전체 화면 모달로 확대 (backdrop-blur)
 
 ---
 
@@ -225,7 +257,9 @@ AI와 자유로운 대화를 통해:
 
 | 영역 | 기술 |
 |------|------|
-| Frontend | Next.js 15, React, TypeScript, Tailwind CSS |
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| UI | Pretendard Variable 폰트, @tailwindcss/typography |
+| 마크다운 | react-markdown |
 | AI | OpenAI GPT-4o-mini |
 | 검색 | Semantic Scholar API |
 | 이미지 | Moonlight API |
@@ -251,8 +285,9 @@ AI와 자유로운 대화를 통해:
 ```
 app/
 ├── page.tsx                    # 메인 페이지
+├── globals.css                 # 글로벌 스타일, Pretendard 폰트, 애니메이션
 ├── components/
-│   ├── styles.ts              # 공통 스타일 상수
+│   ├── styles.ts              # 공통 스타일 상수 (slate 색상 계열)
 │   ├── HorizontalPaperCard.tsx # 수평 논문 카드
 │   ├── SearchResultCard.tsx    # 검색 결과 카드
 │   ├── SelectedPapersSection.tsx # 선택됨 영역
@@ -271,38 +306,47 @@ app/
 
 ## 13. 디자인
 
-### 13.1 컬러 테마
-- **모노톤 (그레이)** 기반
-- 라이트 모드: 흰색 배경 (`bg-white`)
-- 다크 모드: 어두운 회색 배경 (`dark:bg-gray-900`)
+### 13.1 폰트
+- **Pretendard Variable**: 본문 및 UI 전체
+- CDN: `cdn.jsdelivr.net/gh/orioncactus/pretendard`
 
-### 13.2 스타일 상수 (styles.ts)
+### 13.2 컬러 테마
+- **Slate 계열** 기반 (gray → slate 전환)
+- 라이트 모드: 흰색 배경 (`bg-white`)
+- 다크 모드: 어두운 슬레이트 배경 (`dark:bg-slate-900`)
+- 액센트: indigo 계열
+
+### 13.3 스타일 상수 (styles.ts)
 ```typescript
 button: {
-  primary: 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900',
-  primarySmall: '...',
-  secondary: 'border border-gray-300 hover:bg-gray-100',
-  icon: 'px-2 py-1 text-sm border rounded',
+  primary: 'bg-slate-900 text-white rounded-lg hover:scale-[1.02]',
+  secondary: 'border border-slate-200 rounded-lg hover:bg-slate-50',
+  icon: 'p-2 rounded-lg hover:bg-slate-100',
 }
 card: {
-  base: 'border border-gray-200 dark:border-gray-700 rounded',
-  withPadding: '... p-3',
-  withPaddingLarge: '... p-4',
+  base: 'bg-white border border-slate-200 rounded-xl shadow-sm',
+  hover: 'hover:shadow-md hover:border-slate-300 transition-all',
 }
 text: {
-  primary: 'text-gray-900 dark:text-white',
-  secondary: 'text-gray-700 dark:text-gray-300',
-  tertiary: 'text-gray-500 dark:text-gray-400',
-  muted: 'text-gray-400 dark:text-gray-500',
-  link: 'text-blue-600 dark:text-blue-400 hover:underline',
+  primary: 'text-slate-900 dark:text-white',
+  secondary: 'text-slate-700 dark:text-slate-300',
+  link: 'text-indigo-600 hover:underline',
+  accent: 'text-indigo-600 dark:text-indigo-400',
 }
+tag: 'bg-indigo-50 text-indigo-600 rounded-full'
 ```
 
-### 13.3 레이아웃 간격
-- 섹션 간격: `space-y-4`
-- 카드 간격: `space-y-3`, `gap-3`
-- 수평 스크롤: `overflow-x-auto`
+### 13.4 애니메이션
+- `animate-fade-in`: 카드 등장
+- `animate-scale-in`: 모달 등장
+- `animate-pulse`: 분석 중 상태
+- `animate-bounce`: 타이핑 인디케이터
+
+### 13.5 레이아웃 간격
+- 섹션 간격: `space-y-5`
+- 카드 간격: `space-y-4`, `gap-3`
+- 수평 스크롤: `overflow-x-auto scrollbar-thin`
 
 ---
 
-**Last Updated**: 2025-01-25
+**Last Updated**: 2026-01-25
