@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Paper Search - Semantic Scholar",
-  description: "Search academic papers using Semantic Scholar API",
+  title: "Moon Search Light",
+  description: "AI 기반 논문 검색 및 연구 도우미",
 };
 
 export default function RootLayout({

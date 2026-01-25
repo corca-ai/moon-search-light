@@ -63,9 +63,7 @@ export function NoteSidebar({
 
   // Icons
   const LogoIcon = () => (
-    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
+    <img src="/favicon.ico" alt="Moon Search Light" className="w-7 h-7" />
   );
 
   const FolderIcon = ({ active }: { active?: boolean }) => (
@@ -104,20 +102,13 @@ export function NoteSidebar({
   if (isCollapsed) {
     return (
       <div className="w-14 h-screen flex flex-col items-center bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
-        {/* Logo */}
-        <div className="h-14 flex items-center justify-center border-b border-slate-200 dark:border-slate-800 w-full">
-          <div className="text-slate-700 dark:text-slate-300">
-            <LogoIcon />
-          </div>
-        </div>
-
-        {/* Expand Button */}
+        {/* Logo - Click to expand */}
         <button
           onClick={() => setIsCollapsed(false)}
-          className="mt-3 p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+          className="h-14 flex items-center justify-center border-b border-slate-200 dark:border-slate-800 w-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           title="사이드바 펼치기"
         >
-          <ChevronRightIcon />
+          <LogoIcon />
         </button>
 
         {/* Current Session Indicator */}
@@ -150,7 +141,7 @@ export function NoteSidebar({
             <LogoIcon />
           </div>
           <div>
-            <h1 className="text-sm font-semibold text-slate-800 dark:text-slate-100 tracking-tight">Moon Search Light</h1>
+            <h1 className="text-base font-extrabold text-indigo-600 dark:text-indigo-400 tracking-tight">Moon Search Light</h1>
           </div>
         </div>
         <button
