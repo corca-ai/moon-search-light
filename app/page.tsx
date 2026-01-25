@@ -339,8 +339,8 @@ ${summary.researchLandscape}
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            selectedTitles: selectedPapers.map(p => p.title),
-            excludedTitles: excludedPapers.map(p => p.title),
+            selectedPapers: selectedPapers.map(p => ({ title: p.title, year: p.year })),
+            excludedPapers: excludedPapers.map(p => ({ title: p.title, year: p.year })),
           }),
         });
         if (response.ok) {
