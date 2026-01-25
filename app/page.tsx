@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import posthog from 'posthog-js';
 import type { Paper } from './api/search/route';
 import { SelectedPapersSection } from './components/SelectedPapersSection';
 import { SearchResultCard } from './components/SearchResultCard';
@@ -47,6 +48,35 @@ export default function Home() {
   const [allPapers, setAllPapers] = useState<Paper[]>([]);
   const [displayCount, setDisplayCount] = useState(20);
 
+  // Email identification
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+
+  // Check localStorage for email on mount
+  useEffect(() => {
+    const storedEmail = localStorage.getItem('userEmail');
+    if (storedEmail) {
+      setUserEmail(storedEmail);
+      posthog.identify(storedEmail, { email: storedEmail });
+    } else {
+      setShowEmailModal(true);
+    }
+  }, []);
+
+  const handleEmailSubmit = () => {
+    const email = emailInput.trim();
+    if (!email || !email.includes('@')) return;
+
+    localStorage.setItem('userEmail', email);
+    setUserEmail(email);
+    setShowEmailModal(false);
+
+    // PostHog: Identify user
+    posthog.identify(email, { email: email });
+    posthog.capture('user_identified', { email: email });
+  };
+
   const addSystemMessage = (message: string) => {
     if (assistantActive) {
       setChatMessages(prev => [...prev, { role: 'system', content: message, timestamp: Date.now() }]);
@@ -63,7 +93,9 @@ export default function Home() {
     setDisplayCount(20); // 새 검색 시 초기화
 
     try {
-      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`, {
+        headers: userEmail ? { 'x-user-email': userEmail } : {},
+      });
       const data = await response.json();
 
       if (!response.ok) throw new Error(data.error || 'Failed to fetch papers');
@@ -93,10 +125,21 @@ export default function Home() {
       setCandidatePapers(papers.slice(0, 20));
       setTotal(data.total);
       addSystemMessage(`"${query}" 검색 → ${papers.length}개 결과`);
+
+      // PostHog: Track paper search
+      posthog.capture('paper_searched', {
+        query: query,
+        results_count: papers.length,
+        total_available: data.total,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMessage);
       setAllPapers([]);
       setCandidatePapers([]);
+
+      // PostHog: Capture search error
+      posthog.captureException(err instanceof Error ? err : new Error(errorMessage));
     } finally {
       setLoading(false);
     }
@@ -106,6 +149,15 @@ export default function Home() {
     setSelectedPapers([...selectedPapers, paper]);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
     addSystemMessage(`선택: ${paper.title.slice(0, 40)}...`);
+
+    // PostHog: Track paper selection
+    posthog.capture('paper_selected', {
+      paper_id: paper.paperId,
+      paper_title: paper.title,
+      paper_year: paper.year,
+      citation_count: paper.citationCount,
+      selected_papers_count: selectedPapers.length + 1,
+    });
   };
 
   const moveToCandidate = (paper: Paper) => {
@@ -118,12 +170,25 @@ export default function Home() {
     setExcludedPapers([...excludedPapers, paper]);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
     addSystemMessage(`제외: ${paper.title.slice(0, 40)}...`);
+
+    // PostHog: Track paper exclusion
+    posthog.capture('paper_excluded', {
+      paper_id: paper.paperId,
+      paper_title: paper.title,
+      excluded_papers_count: excludedPapers.length + 1,
+    });
   };
 
   const restorePaper = (paper: Paper) => {
     setCandidatePapers([...candidatePapers, paper]);
     setExcludedPapers(excludedPapers.filter(p => p.paperId !== paper.paperId));
     addSystemMessage(`복원: ${paper.title.slice(0, 40)}...`);
+
+    // PostHog: Track paper restoration
+    posthog.capture('paper_restored', {
+      paper_id: paper.paperId,
+      paper_title: paper.title,
+    });
   };
 
   const loadMorePapers = () => {
@@ -134,6 +199,12 @@ export default function Home() {
     const excludedIds = new Set(excludedPapers.map(p => p.paperId));
     const availablePapers = allPapers.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
     setCandidatePapers(availablePapers.slice(0, newCount));
+
+    // PostHog: Track load more papers
+    posthog.capture('load_more_papers_clicked', {
+      new_display_count: newCount,
+      remaining_papers: allPapers.length - selectedPapers.length - excludedPapers.length - newCount,
+    });
   };
 
   const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
@@ -190,7 +261,10 @@ export default function Home() {
     try {
       const response = await fetch('/api/summarize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(userEmail ? { 'x-user-email': userEmail } : {}),
+        },
         body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
       });
       if (response.ok) {
@@ -209,6 +283,11 @@ export default function Home() {
   };
 
   const processPapersInBatches = async (papers: Paper[]) => {
+    // PostHog: Track batch summarize request
+    posthog.capture('papers_summarize_requested', {
+      papers_count: papers.length,
+    });
+
     const batchSize = 3;
     for (let i = 0; i < papers.length; i += batchSize) {
       const batch = papers.slice(i, i + batchSize);
@@ -220,6 +299,11 @@ export default function Home() {
     if (translations[paperId] || translatingIds.has(paperId)) return;
 
     setTranslatingIds(prev => new Set(prev).add(paperId));
+
+    // PostHog: Track translation request
+    posthog.capture('abstract_translation_requested', {
+      paper_id: paperId,
+    });
 
     try {
       const response = await fetch('/api/translate', {
@@ -276,6 +360,13 @@ export default function Home() {
   const activateAssistant = async () => {
     if (!canActivateAssistant) return;
     setAssistantActive(true);
+
+    // PostHog: Track Research Assistant activation
+    posthog.capture('research_assistant_activated', {
+      selected_papers_count: selectedPapers.length,
+      paper_ids: selectedPapers.map(p => p.paperId),
+      interest_summary: interestSummary,
+    });
 
     // 이미 분석된 논문들과 동일한지 확인
     const currentPaperIds = selectedPapers.map(p => p.paperId).sort().join(',');
@@ -366,6 +457,19 @@ ${summary.researchLandscape}
     // 대화 내용 유지 (재활성화 시 기억)
   };
 
+  const handleShowDetailPaper = (paper: Paper | null) => {
+    setDetailPaper(paper);
+    if (paper) {
+      // PostHog: Track paper detail viewed
+      posthog.capture('paper_detail_viewed', {
+        paper_id: paper.paperId,
+        paper_title: paper.title,
+        paper_year: paper.year,
+        citation_count: paper.citationCount,
+      });
+    }
+  };
+
   useEffect(() => {
     if (selectedPapers.length < 1 && assistantActive) {
       deactivateAssistant();
@@ -410,10 +514,20 @@ ${summary.researchLandscape}
     setChatInput('');
     setChatLoading(true);
 
+    // PostHog: Track chat message sent
+    posthog.capture('chat_message_sent', {
+      message_length: chatInput.length,
+      selected_papers_count: selectedPapers.length,
+      chat_history_length: chatMessages.length + 1,
+    });
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(userEmail ? { 'x-user-email': userEmail } : {}),
+        },
         body: JSON.stringify({
           messages: [...chatMessages, userMessage],
           context: { papers: selectedPapers, analyses },
@@ -455,6 +569,12 @@ ${summary.researchLandscape}
   };
 
   const downloadResearchOverview = () => {
+    // PostHog: Track research overview download
+    posthog.capture('research_overview_downloaded', {
+      selected_papers_count: selectedPapers.length,
+      chat_messages_count: chatMessages.length,
+    });
+
     const now = new Date();
     const dateStr = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -555,7 +675,7 @@ ${summary.researchLandscape}
               onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
               onMoveToCandidate={moveToCandidate}
               onRestorePaper={restorePaper}
-              onShowDetail={setDetailPaper}
+              onShowDetail={handleShowDetailPaper}
               interestSummary={interestSummary}
             />
 
@@ -614,6 +734,13 @@ ${summary.researchLandscape}
                   setSortBy(newSort);
                   const sortLabels: Record<string, string> = { relevance: '관련성', recommended: '추천순', 'year-desc': '최신순', citations: '인용순' };
                   addSystemMessage(`정렬 변경: ${sortLabels[newSort]}`);
+
+                  // PostHog: Track sort order change
+                  posthog.capture('sort_order_changed', {
+                    sort_by: newSort,
+                    sort_label: sortLabels[newSort],
+                    candidate_papers_count: candidatePapers.length,
+                  });
                 }}
                 className={`text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 ${styles.text.secondary} focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-slate-400 transition-all`}
               >
@@ -674,7 +801,7 @@ ${summary.researchLandscape}
               onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
               onMoveToCandidate={moveToCandidate}
               onRestorePaper={restorePaper}
-              onShowDetail={setDetailPaper}
+              onShowDetail={handleShowDetailPaper}
               interestSummary={interestSummary}
             />
 
@@ -762,6 +889,34 @@ ${summary.researchLandscape}
           onClose={() => setDetailPaper(null)}
           onTranslate={translateAbstract}
         />
+      )}
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className={`${styles.card.withPaddingLarge} max-w-md w-full mx-4`}>
+            <h2 className={`text-lg font-semibold ${styles.text.primary} mb-2`}>환영합니다</h2>
+            <p className={`text-sm ${styles.text.secondary} mb-4`}>
+              서비스 이용을 위해 이메일을 입력해주세요.
+            </p>
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleEmailSubmit()}
+              placeholder="your@email.com"
+              className={`${styles.input.base} mb-4`}
+              autoFocus
+            />
+            <button
+              onClick={handleEmailSubmit}
+              disabled={!emailInput.includes('@')}
+              className={`${styles.button.primary} w-full disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              시작하기
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

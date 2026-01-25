@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
+import { getPostHogClient } from '@/app/lib/posthog-server';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -46,6 +47,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(analysis);
   } catch (error) {
     console.error('Error summarizing paper:', error);
+
+    // PostHog: Capture summarize API error
+    const posthog = getPostHogClient();
+    const userEmail = request.headers.get('x-user-email') || 'anonymous';
+    posthog.capture({
+      distinctId: userEmail,
+      event: 'summarize_api_error',
+      properties: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+
     return NextResponse.json(
       { error: 'Failed to summarize paper' },
       { status: 500 }

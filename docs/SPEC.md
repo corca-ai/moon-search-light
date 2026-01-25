@@ -264,16 +264,42 @@ score = yearScore * 0.6 + citationScore * 0.4
 
 | 영역 | 기술 |
 |------|------|
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
 | UI | Pretendard Variable 폰트, @tailwindcss/typography |
 | 마크다운 | react-markdown |
 | AI | OpenAI GPT-4o-mini |
 | 검색 | Semantic Scholar API |
 | 이미지 | Moonlight API |
+| Analytics | PostHog (posthog-js, posthog-node) |
 
 ---
 
-## 11. API 엔드포인트
+## 11. 사용자 식별 및 분석
+
+### 11.1 이메일 입력
+- 앱 최초 접속 시 이메일 입력 모달 표시
+- `localStorage`에 저장하여 재방문 시 자동 인식
+- PostHog `identify()` 호출로 사용자 식별
+
+### 11.2 PostHog Analytics
+- 클라이언트: `posthog-js` (instrumentation-client.ts)
+- 서버: `posthog-node` (app/lib/posthog-server.ts)
+- 리버스 프록시: `/ingest` → PostHog (광고 차단기 우회)
+
+### 11.3 트래킹 이벤트
+| 이벤트 | 설명 | 주요 속성 |
+|--------|------|----------|
+| user_identified | 사용자 이메일 입력 | email |
+| paper_searched | 논문 검색 | query, results_count |
+| paper_selected | 논문 선택 | paper_id, paper_title |
+| paper_excluded | 논문 제외 | paper_id |
+| research_assistant_activated | 연구 어시스턴트 활성화 | selected_papers_count, interest_summary |
+| papers_summarize_requested | 논문 요약 배치 요청 | papers_count |
+| chat_message_sent | 채팅 메시지 전송 | message_length |
+
+---
+
+## 12. API 엔드포인트
 
 | 경로 | 용도 |
 |------|------|
@@ -287,11 +313,12 @@ score = yearScore * 0.6 + citationScore * 0.4
 
 ---
 
-## 12. 컴포넌트 구조
+## 13. 컴포넌트 구조
 
 ```
 app/
 ├── page.tsx                    # 메인 페이지
+├── favicon.ico                 # 파비콘
 ├── globals.css                 # 글로벌 스타일, Pretendard 폰트, 애니메이션
 ├── components/
 │   ├── styles.ts              # 공통 스타일 상수 (slate 색상 계열)
@@ -299,6 +326,8 @@ app/
 │   ├── SearchResultCard.tsx    # 검색 결과 카드
 │   ├── SelectedPapersSection.tsx # 선택됨 영역
 │   └── PaperDetailModal.tsx    # 논문 상세 모달
+├── lib/
+│   └── posthog-server.ts      # 서버 사이드 PostHog 클라이언트
 └── api/
     ├── search/route.ts
     ├── summarize/route.ts
@@ -311,7 +340,7 @@ app/
 
 ---
 
-## 13. 디자인
+## 14. 디자인
 
 ### 13.1 폰트
 - **Pretendard Variable**: 본문 및 UI 전체

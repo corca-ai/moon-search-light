@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import OpenAI from 'openai';
+import { getPostHogClient } from '@/app/lib/posthog-server';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -10,6 +11,18 @@ export async function POST(request: NextRequest) {
     const { messages, context } = await request.json();
 
     const { papers, analyses } = context || {};
+
+    // PostHog: Track chat API call
+    const posthog = getPostHogClient();
+    const userEmail = request.headers.get('x-user-email') || 'anonymous';
+    posthog.capture({
+      distinctId: userEmail,
+      event: 'chat_api_called',
+      properties: {
+        papers_count: papers?.length || 0,
+        messages_count: messages?.length || 0,
+      },
+    });
 
     // Build comprehensive context for the AI
     let systemPrompt = `당신은 학술 연구를 돕는 전문 AI 조력자입니다.
@@ -86,6 +99,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error in chat:', error);
+
+    // PostHog: Capture chat API error
+    const posthog = getPostHogClient();
+    const userEmail = request.headers.get('x-user-email') || 'anonymous';
+    posthog.capture({
+      distinctId: userEmail,
+      event: 'chat_api_error',
+      properties: {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+
     return new Response(JSON.stringify({ error: 'Failed to process chat' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

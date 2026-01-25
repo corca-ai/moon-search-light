@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getPostHogClient } from '@/app/lib/posthog-server';
 
 export interface Paper {
   paperId: string;
@@ -92,6 +93,20 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // PostHog: Track server-side search API call
+    const posthog = getPostHogClient();
+    const userEmail = request.headers.get('x-user-email') || 'anonymous';
+    posthog.capture({
+      distinctId: userEmail,
+      event: 'search_api_called',
+      properties: {
+        query: query,
+        results_count: allPapers.length,
+        total_available: data.total || 0,
+        is_specific_query: isSpecificQuery,
+      },
+    });
+
     return NextResponse.json({
       papers: sortedPapers.slice(0, 20),
       allPapers: allPapers,
@@ -99,6 +114,19 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching papers:', error);
+
+    // PostHog: Capture search API error
+    const posthog = getPostHogClient();
+    const userEmail = request.headers.get('x-user-email') || 'anonymous';
+    posthog.capture({
+      distinctId: userEmail,
+      event: 'search_api_error',
+      properties: {
+        query: query,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+
     return NextResponse.json(
       { error: 'Failed to fetch papers' },
       { status: 500 }

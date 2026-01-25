@@ -1,5 +1,6 @@
 'use client';
 
+import posthog from 'posthog-js';
 import type { Paper } from '../api/search/route';
 import { styles } from './styles';
 
@@ -89,7 +90,20 @@ export function SearchResultCard({
           {paperLink && (
             <>
               <span className="text-slate-300 dark:text-slate-600">•</span>
-              <a href={paperLink} target="_blank" rel="noopener noreferrer" className={styles.text.link}>
+              <a
+                href={paperLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.text.link}
+                onClick={() => {
+                  // PostHog: Track paper link click
+                  posthog.capture('paper_link_clicked', {
+                    paper_id: paper.paperId,
+                    paper_title: paper.title,
+                    link_type: paper.externalIds?.ArXiv ? 'arxiv' : paper.pdfUrl ? 'pdf' : 'url',
+                  });
+                }}
+              >
                 논문 보기 →
               </a>
             </>
