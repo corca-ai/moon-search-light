@@ -25,15 +25,15 @@ import {
 } from '../lib/session-list';
 
 // Debounce helper
-function debounce<T extends (...args: unknown[]) => void>(
-  fn: T,
+function debounce<Args extends unknown[]>(
+  fn: (...args: Args) => void,
   delay: number
-): T {
+): (...args: Args) => void {
   let timeoutId: NodeJS.Timeout;
-  return ((...args: unknown[]) => {
+  return (...args: Args) => {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => fn(...args), delay);
-  }) as T;
+  };
 }
 
 export function useSession() {
