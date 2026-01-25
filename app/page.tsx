@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import type { Paper } from './api/search/route';
+import { SelectedPapersSection } from './components/SelectedPapersSection';
+import { SearchResultCard } from './components/SearchResultCard';
+import { PaperDetailModal } from './components/PaperDetailModal';
+import { styles } from './components/styles';
 
 interface PaperAnalysis {
   overview: string;
@@ -15,13 +19,6 @@ interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: number;
-}
-
-interface ActivityLog {
-  id: number;
-  time: Date;
-  type: 'search' | 'select' | 'deselect' | 'exclude' | 'restore' | 'sort';
-  message: string;
 }
 
 export default function Home() {
@@ -40,24 +37,16 @@ export default function Home() {
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [assistantActive, setAssistantActive] = useState(false);
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [logIdCounter, setLogIdCounter] = useState(0);
   const [analyzedPaperIds, setAnalyzedPaperIds] = useState<string[]>([]);
   const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
+  const [interestSummary, setInterestSummary] = useState('');
 
-  const addLog = (type: ActivityLog['type'], message: string) => {
-    const now = Date.now();
-    setActivityLogs(prev => [{
-      id: logIdCounter,
-      time: new Date(),
-      type,
-      message,
-    }, ...prev].slice(0, 50)); // 최대 50개 유지
-    setLogIdCounter(prev => prev + 1);
-
-    // Assistant 활성 시 채팅에도 시스템 메시지로 추가
+  const addSystemMessage = (message: string) => {
     if (assistantActive) {
-      setChatMessages(prev => [...prev, { role: 'system', content: message, timestamp: now }]);
+      setChatMessages(prev => [...prev, { role: 'system', content: message, timestamp: Date.now() }]);
     }
   };
 
@@ -98,7 +87,7 @@ export default function Home() {
 
       setCandidatePapers(papers);
       setTotal(data.total);
-      addLog('search', `"${query}" 검색 → ${papers.length}개 결과`);
+      addSystemMessage(`"${query}" 검색 → ${papers.length}개 결과`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setCandidatePapers([]);
@@ -110,25 +99,25 @@ export default function Home() {
   const moveToSelected = (paper: Paper) => {
     setSelectedPapers([...selectedPapers, paper]);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
-    addLog('select', `선택: ${paper.title.slice(0, 40)}...`);
+    addSystemMessage(`선택: ${paper.title.slice(0, 40)}...`);
   };
 
   const moveToCandidate = (paper: Paper) => {
     setCandidatePapers([...candidatePapers, paper]);
     setSelectedPapers(selectedPapers.filter(p => p.paperId !== paper.paperId));
-    addLog('deselect', `선택해제: ${paper.title.slice(0, 40)}...`);
+    addSystemMessage(`선택해제: ${paper.title.slice(0, 40)}...`);
   };
 
   const excludePaper = (paper: Paper) => {
     setExcludedPapers([...excludedPapers, paper]);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
-    addLog('exclude', `제외: ${paper.title.slice(0, 40)}...`);
+    addSystemMessage(`제외: ${paper.title.slice(0, 40)}...`);
   };
 
   const restorePaper = (paper: Paper) => {
     setCandidatePapers([...candidatePapers, paper]);
     setExcludedPapers(excludedPapers.filter(p => p.paperId !== paper.paperId));
-    addLog('restore', `복원: ${paper.title.slice(0, 40)}...`);
+    addSystemMessage(`복원: ${paper.title.slice(0, 40)}...`);
   };
 
   const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
@@ -139,14 +128,6 @@ export default function Home() {
       case 'citations': return sorted.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
       default: return sorted;
     }
-  };
-
-  const addKeywordToSearch = (keyword: string) => {
-    const currentKeywords = query.trim();
-    const keywordLower = keyword.toLowerCase();
-    const existingKeywords = currentKeywords.split(/\s+/).map(k => k.toLowerCase());
-    if (existingKeywords.includes(keywordLower)) return;
-    setQuery(currentKeywords ? `${currentKeywords} ${keyword}` : keyword);
   };
 
   const fetchAnalysis = async (paper: Paper) => {
@@ -183,6 +164,33 @@ export default function Home() {
     for (let i = 0; i < papers.length; i += batchSize) {
       const batch = papers.slice(i, i + batchSize);
       await Promise.all(batch.map(paper => fetchAnalysis(paper)));
+    }
+  };
+
+  const translateAbstract = async (paperId: string, abstract: string) => {
+    if (translations[paperId] || translatingIds.has(paperId)) return;
+
+    setTranslatingIds(prev => new Set(prev).add(paperId));
+
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: abstract }),
+      });
+
+      if (response.ok) {
+        const { translation } = await response.json();
+        setTranslations(prev => ({ ...prev, [paperId]: translation }));
+      }
+    } catch (err) {
+      console.error('Failed to translate:', err);
+    } finally {
+      setTranslatingIds(prev => {
+        const next = new Set(prev);
+        next.delete(paperId);
+        return next;
+      });
     }
   };
 
@@ -229,17 +237,26 @@ export default function Home() {
       return;
     }
 
-    setChatLoading(true);
-
-    // 선택된 논문 목록 표시
     const paperList = selectedPapers.map((p, i) => `${i + 1}. ${p.title} (${p.year || '연도 미상'})`).join('\n');
+
+    // 논문 1개: 통합 분석 없이 바로 시작
+    if (selectedPapers.length === 1) {
+      setChatMessages([{
+        role: 'assistant',
+        content: `**선택된 논문:**\n${paperList}\n\n무엇을 도와드릴까요?\n\n💡 2개 이상의 논문을 선택하면 통합 분석을 제공합니다.`,
+      }]);
+      setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
+      return;
+    }
+
+    // 논문 2개 이상: 통합 분석 수행
+    setChatLoading(true);
     setChatMessages([{
       role: 'assistant',
-      content: `**선택된 논문 ${selectedPapers.length}개를 분석 중입니다...**\n\n${paperList}`,
+      content: `**선택된 논문 ${selectedPapers.length}개를 통합 분석 중입니다...**\n\n${paperList}`,
     }]);
 
     try {
-      // 통합 컨텍스트 생성
       const response = await fetch('/api/context-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -307,6 +324,35 @@ ${summary.researchLandscape}
       setAnalyzedPaperIds([]);
     }
   }, [selectedPapers.length]);
+
+  // 관심사 요약 업데이트 (디바운스)
+  useEffect(() => {
+    if (selectedPapers.length === 0 && excludedPapers.length === 0) {
+      setInterestSummary('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch('/api/interest-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            selectedTitles: selectedPapers.map(p => p.title),
+            excludedTitles: excludedPapers.map(p => p.title),
+          }),
+        });
+        if (response.ok) {
+          const { summary } = await response.json();
+          setInterestSummary(summary);
+        }
+      } catch (err) {
+        console.error('Failed to fetch interest summary:', err);
+      }
+    }, 500); // 500ms 디바운스
+
+    return () => clearTimeout(timer);
+  }, [selectedPapers, excludedPapers]);
 
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
@@ -405,347 +451,176 @@ ${summary.researchLandscape}
     URL.revokeObjectURL(url);
   };
 
-  const renderPaperCard = (paper: Paper, type: 'selected' | 'candidate' | 'excluded') => {
-    // 선택된/제외된 논문: 간결한 카드
-    if (type === 'selected' || type === 'excluded') {
-      return (
-        <div
-          key={paper.paperId}
-          className={`border border-gray-200 dark:border-gray-700 rounded p-3 ${type === 'excluded' ? 'opacity-50' : ''}`}
-        >
-          <div className="flex justify-between items-start gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white leading-snug">
-                {paper.title}
-              </h3>
-              {analyses[paper.paperId] && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed line-clamp-2">
-                  {analyses[paper.paperId].overview}
-                </p>
-              )}
-              <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-1">
-                {paper.year && <span>{paper.year}</span>}
-                {paper.year && <span>•</span>}
-                <span>인용 {paper.citationCount?.toLocaleString()}</span>
-              </div>
-            </div>
-            {type === 'selected' && (
-              <button onClick={() => moveToCandidate(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0">★</button>
-            )}
-            {type === 'excluded' && (
-              <button onClick={() => restorePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0">복원</button>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // 후보 논문: 전체 카드
-    return (
-      <div
-        key={paper.paperId}
-        className="border border-gray-200 dark:border-gray-700 rounded p-4 flex gap-4"
-      >
-        {/* 썸네일 - 왼쪽 고정 (이미지 있을 때만 표시) */}
-        {paper.snapshots && paper.snapshots.length > 0 && (
-          <div className="shrink-0 w-32">
-            <img
-              src={paper.snapshots[0]}
-              alt=""
-              className="w-32 h-44 object-cover rounded border border-gray-200 dark:border-gray-700 cursor-pointer"
-              onClick={() => setModalImage(paper.snapshots![0])}
-            />
-            {paper.snapshots.length > 1 && (
-              <div className="flex gap-1 mt-1">
-                {paper.snapshots.slice(1, 3).map((snapshot, idx) => (
-                  <img
-                    key={idx}
-                    src={snapshot}
-                    alt=""
-                    className="w-[62px] h-10 object-cover rounded border border-gray-200 dark:border-gray-700 cursor-pointer"
-                    onClick={() => setModalImage(snapshot)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 콘텐츠 - 오른쪽 */}
-        <div className="flex-1 min-w-0">
-          {/* 헤더: 제목 + 액션 버튼 */}
-          <div className="flex justify-between items-start gap-3 mb-3">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white leading-relaxed flex-1">
-              {paper.title}
-            </h3>
-            <div className="flex gap-1 shrink-0">
-              <button onClick={() => moveToSelected(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">☆</button>
-              <button onClick={() => excludePaper(paper)} className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700">×</button>
-            </div>
-          </div>
-
-          {/* 메타 정보 */}
-          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
-            {paper.year && <span className="font-medium">{paper.year}</span>}
-            {paper.year && <span className="text-gray-300 dark:text-gray-600">•</span>}
-            <span>인용 {paper.citationCount?.toLocaleString()}</span>
-            <span className="text-gray-300 dark:text-gray-600">•</span>
-            {paper.externalIds?.ArXiv ? (
-              <a href={`https://www.themoonlight.io/file?url=${encodeURIComponent(`https://arxiv.org/pdf/${paper.externalIds.ArXiv}.pdf`)}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
-                논문 보기 →
-              </a>
-            ) : (paper.pdfUrl || paper.url) && (
-              <a href={paper.pdfUrl ? `https://www.themoonlight.io/file?url=${encodeURIComponent(paper.pdfUrl)}` : paper.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
-                논문 보기 →
-              </a>
-            )}
-          </div>
-
-          {/* 분석 중: 초록 표시 */}
-          {!analyses[paper.paperId] && paper.abstract && (
-            <div className="space-y-2">
-              <div className="text-xs text-blue-500 dark:text-blue-400 font-medium">분석 중...</div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">{paper.abstract}</p>
-            </div>
-          )}
-
-          {/* AI 분석 결과 */}
-          {analyses[paper.paperId] && (
-            <div className="space-y-3">
-              {/* 접을 수 있는 초록 */}
-              {paper.abstract && (
-                <details className="group">
-                  <summary className="text-xs text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-600 dark:hover:text-gray-400 select-none">
-                    <span className="group-open:hidden">▸ 초록 보기</span>
-                    <span className="hidden group-open:inline">▾ 초록 접기</span>
-                  </summary>
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 leading-relaxed pl-3 border-l-2 border-gray-200 dark:border-gray-700">{paper.abstract}</p>
-                </details>
-              )}
-
-              <div className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-2 text-sm">
-                <span className="text-gray-400 dark:text-gray-500">개요</span>
-                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].overview}</span>
-
-                <span className="text-gray-400 dark:text-gray-500">목표</span>
-                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].goals}</span>
-
-                <span className="text-gray-400 dark:text-gray-500">방법론</span>
-                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].method}</span>
-
-                <span className="text-gray-400 dark:text-gray-500">결과</span>
-                <span className="text-gray-700 dark:text-gray-300 leading-relaxed">{analyses[paper.paperId].results}</span>
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-2">
-                {analyses[paper.paperId].keywords.map((kw, idx) => (
-                  <button key={idx} onClick={() => addKeywordToSearch(kw)} className="px-2.5 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-xs font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">{kw}</button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="mb-6 pb-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-medium text-gray-900 dark:text-white">moon-search-light</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">논문 탐색 도구</p>
+        <div className="mb-3 pb-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <h1 className={`text-base font-medium ${styles.text.primary}`}>moon-search-light</h1>
+            <span className={`text-xs ${styles.text.muted}`}>논문 탐색 도구</span>
           </div>
-          {assistantActive && chatMessages.length > 1 && (
-            <button onClick={downloadResearchOverview} className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 dark:border-gray-600 px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
-              연구 개요 다운로드
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {assistantActive && chatMessages.length > 1 && (
+              <button onClick={downloadResearchOverview} className={styles.button.secondary}>
+                연구 개요 다운로드
+              </button>
+            )}
+            {assistantActive ? (
+              <button onClick={deactivateAssistant} className={styles.button.secondary}>
+                ← 검색으로
+              </button>
+            ) : (
+              canActivateAssistant && (
+                <button onClick={activateAssistant} className={styles.button.primarySmall}>
+                  연구 시작
+                </button>
+              )
+            )}
+          </div>
         </div>
-        <div className="flex gap-2">
-          {/* Collapsed Search Indicator (Assistant 활성시) */}
-          {assistantActive && (
-            <button
-              onClick={deactivateAssistant}
-              className="w-10 shrink-0 border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-gray-600 transition-colors"
-              title="검색으로 돌아가기"
-            >
-              <span className="text-sm" style={{ writingMode: 'vertical-rl' }}>검색</span>
-              <span className="text-xl">›</span>
-            </button>
-          )}
+        {!assistantActive ? (
+          /* ===== Assistant 비활성: 상하 레이아웃 ===== */
+          <div className="space-y-4">
+            {/* 상단: 선택됨 (수평 스크롤) */}
+            <SelectedPapersSection
+              selectedPapers={selectedPapers}
+              excludedPapers={excludedPapers}
+              excludedExpanded={excludedExpanded}
+              onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
+              onMoveToCandidate={moveToCandidate}
+              onRestorePaper={restorePaper}
+              onShowDetail={setDetailPaper}
+              interestSummary={interestSummary}
+            />
 
-          {/* Left Column - 검색 결과 (Assistant 비활성시) 또는 선택됨/제외됨 (Assistant 활성시) */}
-          <div className={`${assistantActive ? 'flex-1' : 'flex-[2]'} space-y-3`}>
-            {!assistantActive ? (
-              <>
-                <form onSubmit={handleSearch} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="논문 검색..."
-                    className="flex-1 px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-gray-400"
-                  />
-                  <button type="submit" disabled={loading} className="px-5 py-3 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded hover:bg-gray-700 dark:hover:bg-gray-300 disabled:opacity-50">
-                    {loading ? '...' : '검색'}
-                  </button>
-                </form>
-
-                {error && <div className="p-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded">{error}</div>}
-
-                <div className="flex justify-between items-center text-base">
-                  <span className="font-medium text-gray-700 dark:text-gray-300">
-                    검색 결과 ({candidatePapers.length}개 표시{total > 0 && <span className="text-gray-400 font-normal"> / {total.toLocaleString()}개 중</span>})
-                  </span>
-                  <select value={sortBy} onChange={(e) => {
-                      const newSort = e.target.value as typeof sortBy;
-                      setSortBy(newSort);
-                      addLog('sort', `정렬 변경: ${newSort === 'relevance' ? '관련성' : newSort === 'year-desc' ? '최신순' : '인용순'}`);
-                    }} className="text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800">
-                    <option value="relevance">관련성</option>
-                    <option value="year-desc">최신순</option>
-                    <option value="citations">인용순</option>
-                  </select>
-                </div>
-
-                <div className="space-y-3 max-h-[80vh] overflow-y-auto">
-                  {sortPapers(candidatePapers, sortBy).map(paper => renderPaperCard(paper, 'candidate'))}
-                  {candidatePapers.length === 0 && !loading && <div className="text-center text-gray-400 py-8 text-base">검색어를 입력하세요</div>}
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col h-[calc(100vh-140px)]">
-                {/* Assistant 활성시: 선택됨/제외됨을 왼쪽에 표시 */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex-1 overflow-hidden flex flex-col">
-                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                    선택됨 ({selectedPapers.length})
-                  </div>
-                  <div className="space-y-3 overflow-y-auto flex-1">
-                    {selectedPapers.map(paper => renderPaperCard(paper, 'selected'))}
-                  </div>
-                </div>
-
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 mt-3 shrink-0">
-                  <button onClick={() => setExcludedExpanded(!excludedExpanded)} className="text-base text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 w-full text-left">
-                    {excludedExpanded ? '▼' : '▸'} 제외됨 ({excludedPapers.length})
-                  </button>
-                  {excludedExpanded && (
-                    <div className="mt-3 space-y-3 max-h-[25vh] overflow-y-auto">
-                      {excludedPapers.map(paper => renderPaperCard(paper, 'excluded'))}
-                      {excludedPapers.length === 0 && <div className="text-center text-gray-400 py-2 text-sm">없음</div>}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column - 선택됨/제외됨 (Assistant 비활성시) 또는 Assistant (활성시) */}
-          <div className={assistantActive ? 'flex-[2]' : 'flex-1'}>
-            {!assistantActive ? (
-              <div className="flex flex-col h-[calc(100vh-140px)]">
-                {/* Assistant 비활성시: 선택됨/제외됨을 오른쪽에 표시 */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex-1 overflow-hidden flex flex-col">
-                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                    선택됨 ({selectedPapers.length})
-                  </div>
-                  <div className="space-y-3 overflow-y-auto flex-1">
-                    {selectedPapers.map(paper => renderPaperCard(paper, 'selected'))}
-                    {selectedPapers.length === 0 && <div className="text-center text-gray-400 py-4 text-sm">← 검색 결과에서 선택</div>}
-                  </div>
-                </div>
-
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-4 mt-3 shrink-0">
-                  <button onClick={() => setExcludedExpanded(!excludedExpanded)} className="text-base text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 w-full text-left">
-                    {excludedExpanded ? '▼' : '▸'} 제외됨 ({excludedPapers.length})
-                  </button>
-                  {excludedExpanded && (
-                    <div className="mt-3 space-y-3 max-h-[25vh] overflow-y-auto">
-                      {excludedPapers.map(paper => renderPaperCard(paper, 'excluded'))}
-                      {excludedPapers.length === 0 && <div className="text-center text-gray-400 py-2 text-sm">없음</div>}
-                    </div>
-                  )}
-                </div>
-
-                {/* 분석 시작 버튼 */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded p-5 text-center mt-3 shrink-0">
-                  <div className="text-base font-medium text-gray-700 dark:text-gray-300 mb-1">Research Assistant</div>
-                  <div className="text-sm text-gray-400 mb-3">동시에 검토할 논문들을 선택하세요</div>
-                  {canActivateAssistant && (
-                    <button onClick={activateAssistant} className="px-5 py-2.5 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded hover:bg-gray-700 dark:hover:bg-gray-300">
-                      분석 시작
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="border border-gray-200 dark:border-gray-700 rounded p-4 flex flex-col h-[calc(100vh-140px)]">
-                {/* Assistant Panel Header */}
-                <div className="flex justify-between items-center mb-4 shrink-0">
-                  <span className="text-base font-medium text-gray-700 dark:text-gray-300">Research Assistant</span>
-                  <button onClick={deactivateAssistant} className="text-sm text-gray-400 hover:text-gray-600">← 검색으로</button>
-                </div>
-
-                {/* Chat Messages */}
-                <div className="flex-1 overflow-y-auto space-y-3">
-                  {chatMessages.map((msg, idx) => (
-                    <div key={idx} className={`rounded whitespace-pre-wrap leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'text-base p-4 bg-gray-100 dark:bg-gray-800 ml-8'
-                        : msg.role === 'system'
-                        ? 'text-sm p-2 text-gray-500 dark:text-gray-400 text-center'
-                        : 'text-base p-4 bg-gray-50 dark:bg-gray-700 mr-8'
-                    }`}>
-                      {msg.content}
-                    </div>
-                  ))}
-                  {chatLoading && <div className="text-base text-gray-400 p-4">응답 중...</div>}
-                </div>
-
-                  {/* Chat Input */}
-                  <div className="flex gap-2 mt-auto pt-4 shrink-0">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendChatMessage()}
-                      placeholder="메시지를 입력하세요..."
-                      className="flex-1 px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800"
-                      disabled={chatLoading}
-                    />
-                    <button onClick={sendChatMessage} disabled={chatLoading} className="px-5 py-3 text-base bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded disabled:opacity-50">
-                      전송
-                    </button>
-                  </div>
-                </div>
-            )}
-          </div>
-
-          {/* Collapsed Assistant Indicator (Assistant 비활성시) */}
-          {!assistantActive && (
-            <div
-              className={`w-10 shrink-0 border border-gray-200 dark:border-gray-700 rounded flex flex-col items-center justify-center gap-1 transition-colors ${
-                canActivateAssistant
-                  ? 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 cursor-pointer'
-                  : 'bg-gray-50 dark:bg-gray-800 text-gray-300 dark:text-gray-600'
-              }`}
-              onClick={canActivateAssistant ? activateAssistant : undefined}
-              title={canActivateAssistant ? '분석 시작' : '동시에 검토할 논문들을 선택하세요'}
-            >
-              <span className="text-xl">‹</span>
-              <span className="text-sm" style={{ writingMode: 'vertical-rl' }}>Assistant</span>
+            {/* 검색 영역 */}
+            <div className="space-y-2">
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="논문 검색..."
+                  className={`flex-1 ${styles.input.base}`}
+                />
+                <button type="submit" disabled={loading} className={styles.button.primary}>
+                  {loading ? '...' : '검색'}
+                </button>
+              </form>
+              <p className={`text-xs ${styles.text.muted}`}>
+                <a href="https://www.semanticscholar.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600 dark:hover:text-gray-400">Semantic Scholar</a> API 기반 검색 · 컴퓨터과학, 의학, 물리학 등 2억 건 이상의 학술 논문 데이터베이스
+              </p>
             </div>
-          )}
-        </div>
+
+            {error && <div className="p-3 text-sm text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded">{error}</div>}
+
+            {/* 검색 결과 헤더 */}
+            <div className="flex justify-between items-center text-base">
+              <span className={`font-medium ${styles.text.secondary}`}>
+                검색 결과 ({candidatePapers.length}개 표시{total > 0 && <span className={`${styles.text.muted} font-normal`}> / {total.toLocaleString()}개 중</span>})
+              </span>
+              <select value={sortBy} onChange={(e) => {
+                  const newSort = e.target.value as typeof sortBy;
+                  setSortBy(newSort);
+                  addSystemMessage(`정렬 변경: ${newSort === 'relevance' ? '관련성' : newSort === 'year-desc' ? '최신순' : '인용순'}`);
+                }} className="text-sm border border-gray-300 dark:border-gray-600 rounded px-3 py-1.5 bg-white dark:bg-gray-800">
+                <option value="relevance">관련성</option>
+                <option value="year-desc">최신순</option>
+                <option value="citations">인용순</option>
+              </select>
+            </div>
+
+            {/* 검색 결과 (전체 너비) */}
+            <div className="space-y-3 max-h-[calc(100vh-380px)] overflow-y-auto">
+              {sortPapers(candidatePapers, sortBy).map(paper => (
+                <SearchResultCard
+                  key={paper.paperId}
+                  paper={paper}
+                  analysis={analyses[paper.paperId]}
+                  translation={translations[paper.paperId]}
+                  isTranslating={translatingIds.has(paper.paperId)}
+                  onSelect={moveToSelected}
+                  onExclude={excludePaper}
+                  onImageClick={(url) => setModalImage(url)}
+                  onTranslate={translateAbstract}
+                />
+              ))}
+              {candidatePapers.length === 0 && !loading && <div className={`text-center ${styles.text.muted} py-8 text-base`}>검색어를 입력하세요</div>}
+            </div>
+          </div>
+        ) : (
+          /* ===== Assistant 활성: 상하 레이아웃 ===== */
+          <div className="space-y-4">
+            {/* 상단: 선택됨 (수평 스크롤) */}
+            <SelectedPapersSection
+              selectedPapers={selectedPapers}
+              excludedPapers={excludedPapers}
+              excludedExpanded={excludedExpanded}
+              onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
+              onMoveToCandidate={moveToCandidate}
+              onRestorePaper={restorePaper}
+              onShowDetail={setDetailPaper}
+              interestSummary={interestSummary}
+            />
+
+            {/* Research Assistant (전체 너비) */}
+            <div className={`${styles.card.withPaddingLarge} flex flex-col h-[calc(100vh-280px)]`}>
+              <div className="flex justify-between items-center mb-4 shrink-0">
+                <span className={`text-base font-medium ${styles.text.secondary}`}>Research Assistant</span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-3">
+                {chatMessages.map((msg, idx) => (
+                  <div key={idx} className={`rounded whitespace-pre-wrap leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'text-base p-4 bg-gray-100 dark:bg-gray-800 ml-12'
+                      : msg.role === 'system'
+                      ? `text-sm p-2 ${styles.text.tertiary} text-center`
+                      : 'text-base p-4 bg-gray-50 dark:bg-gray-700 mr-12'
+                  }`}>
+                    {msg.content}
+                  </div>
+                ))}
+                {chatLoading && <div className={`text-base ${styles.text.muted} p-4`}>응답 중...</div>}
+              </div>
+
+              <div className="flex gap-2 mt-auto pt-4 shrink-0">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendChatMessage()}
+                  placeholder="메시지를 입력하세요..."
+                  className={`flex-1 ${styles.input.base}`}
+                  disabled={chatLoading}
+                />
+                <button onClick={sendChatMessage} disabled={chatLoading} className={styles.button.primary}>
+                  전송
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal */}
+      {/* Image Modal */}
       {modalImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75" onClick={() => setModalImage(null)}>
           <img src={modalImage} alt="" className="max-w-full max-h-[90vh] rounded" onClick={(e) => e.stopPropagation()} />
         </div>
+      )}
+
+      {/* Paper Detail Modal */}
+      {detailPaper && (
+        <PaperDetailModal
+          paper={detailPaper}
+          analysis={analyses[detailPaper.paperId]}
+          translation={translations[detailPaper.paperId]}
+          isTranslating={translatingIds.has(detailPaper.paperId)}
+          onClose={() => setDetailPaper(null)}
+          onTranslate={translateAbstract}
+        />
       )}
     </div>
   );
