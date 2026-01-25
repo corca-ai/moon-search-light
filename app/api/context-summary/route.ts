@@ -18,9 +18,9 @@ export async function POST(request: NextRequest) {
   try {
     const { papers } = await request.json();
 
-    if (!papers || !Array.isArray(papers) || papers.length < 3) {
+    if (!papers || !Array.isArray(papers) || papers.length < 2) {
       return NextResponse.json(
-        { error: 'At least 3 papers are required' },
+        { error: 'At least 2 papers are required' },
         { status: 400 }
       );
     }
