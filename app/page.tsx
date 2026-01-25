@@ -897,7 +897,7 @@ ${summary.researchLandscape}
           <div className={`${styles.card.withPaddingLarge} max-w-md w-full mx-4`}>
             <h2 className={`text-lg font-semibold ${styles.text.primary} mb-2`}>환영합니다</h2>
             <p className={`text-sm ${styles.text.secondary} mb-4`}>
-              서비스 이용을 위해 이메일을 입력해주세요.
+              테스트 사용자의 이메일을 입력해주세요.
             </p>
             <input
               type="email"
