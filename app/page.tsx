@@ -32,7 +32,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [total, setTotal] = useState(0);
   const [analyses, setAnalyses] = useState<Record<string, PaperAnalysis>>({});
-  const [sortBy, setSortBy] = useState<'relevance' | 'year-desc' | 'year-asc' | 'citations'>('relevance');
+  const [sortBy, setSortBy] = useState<'relevance' | 'recommended' | 'year-desc' | 'year-asc' | 'citations'>('recommended');
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -123,7 +123,31 @@ export default function Home() {
 
   const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
     const sorted = [...papers];
+    const currentYear = new Date().getFullYear();
+
     switch (sortType) {
+      case 'recommended':
+        // 최근 연구 우선 + 인용수 높은 중요 연구 반영
+        return sorted.sort((a, b) => {
+          const yearA = a.year || 2000;
+          const yearB = b.year || 2000;
+          const citationsA = a.citationCount || 0;
+          const citationsB = b.citationCount || 0;
+
+          // 연도 점수: 최근 5년 내 논문에 가중치 (0~1)
+          const yearScoreA = Math.min(1, Math.max(0, (yearA - (currentYear - 5)) / 5));
+          const yearScoreB = Math.min(1, Math.max(0, (yearB - (currentYear - 5)) / 5));
+
+          // 인용수 점수: 로그 스케일로 정규화 (영향력 있는 논문)
+          const citationScoreA = Math.log10(citationsA + 1) / 5;
+          const citationScoreB = Math.log10(citationsB + 1) / 5;
+
+          // 종합 점수: 연도 60% + 인용수 40%
+          const scoreA = yearScoreA * 0.6 + citationScoreA * 0.4;
+          const scoreB = yearScoreB * 0.6 + citationScoreB * 0.4;
+
+          return scoreB - scoreA;
+        });
       case 'year-desc': return sorted.sort((a, b) => (b.year || 0) - (a.year || 0));
       case 'year-asc': return sorted.sort((a, b) => (a.year || 0) - (b.year || 0));
       case 'citations': return sorted.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
@@ -564,10 +588,12 @@ ${summary.researchLandscape}
                 onChange={(e) => {
                   const newSort = e.target.value as typeof sortBy;
                   setSortBy(newSort);
-                  addSystemMessage(`정렬 변경: ${newSort === 'relevance' ? '관련성' : newSort === 'year-desc' ? '최신순' : '인용순'}`);
+                  const sortLabels: Record<string, string> = { relevance: '관련성', recommended: '추천순', 'year-desc': '최신순', citations: '인용순' };
+                  addSystemMessage(`정렬 변경: ${sortLabels[newSort]}`);
                 }}
                 className={`text-sm border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 bg-white dark:bg-slate-800 ${styles.text.secondary} focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all`}
               >
+                <option value="recommended">추천순</option>
                 <option value="relevance">관련성</option>
                 <option value="year-desc">최신순</option>
                 <option value="citations">인용순</option>
