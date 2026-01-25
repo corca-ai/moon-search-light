@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import type { Paper } from './api/search/route';
 import { SelectedPapersSection } from './components/SelectedPapersSection';
 import { SearchResultCard } from './components/SearchResultCard';
@@ -628,15 +629,19 @@ ${summary.researchLandscape}
                 {chatMessages.map((msg, idx) => (
                   <div
                     key={idx}
-                    className={`rounded-xl whitespace-pre-wrap leading-relaxed animate-fade-in ${
+                    className={`rounded-xl leading-relaxed animate-fade-in ${
                       msg.role === 'user'
-                        ? `text-sm p-4 ${styles.bg.tertiary} ml-12`
+                        ? `text-sm p-4 ${styles.bg.tertiary} ml-12 whitespace-pre-wrap`
                         : msg.role === 'system'
-                        ? `text-xs px-3 py-2 ${styles.text.tertiary} text-center`
-                        : `text-sm p-4 ${styles.bg.secondary} mr-12`
+                        ? `text-xs px-3 py-2 ${styles.text.tertiary} text-center whitespace-pre-wrap`
+                        : `text-sm p-4 ${styles.bg.secondary} mr-12 prose prose-sm dark:prose-invert prose-slate max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5`
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === 'assistant' ? (
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 ))}
                 {chatLoading && (
