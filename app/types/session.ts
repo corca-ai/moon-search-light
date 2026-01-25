@@ -50,6 +50,7 @@ export interface SessionState {
   sortBy: string;
   selectedPapers: Paper[];
   excludedPapers: Paper[];
+  searchResults: Paper[]; // All search results (max 100)
   analyses: Record<string, PaperAnalysis>;
   translations: Record<string, string>;
   interestSummary: string;
@@ -57,6 +58,9 @@ export interface SessionState {
   chatMessages: ChatMessage[];
   assistantActive: boolean;
 }
+
+// Max session count
+export const MAX_SESSION_COUNT = 5;
 
 // Full Session
 export interface Session {

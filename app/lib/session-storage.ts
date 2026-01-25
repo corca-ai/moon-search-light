@@ -18,6 +18,7 @@ export function createEmptyState(): SessionState {
     sortBy: 'recommended',
     selectedPapers: [],
     excludedPapers: [],
+    searchResults: [],
     analyses: {},
     translations: {},
     interestSummary: '',

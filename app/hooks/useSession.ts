@@ -22,7 +22,10 @@ import {
 import {
   addToSessionList,
   updateSessionListItem,
+  canCreateSession,
+  getSessionCount,
 } from '../lib/session-list';
+import { MAX_SESSION_COUNT } from '../types/session';
 
 // Debounce helper
 function debounce<Args extends unknown[]>(
@@ -119,8 +122,18 @@ export function useSession() {
     setCurrentSessionId(newSession.id);
   }, []);
 
-  // Create new session
-  const createNewSession = useCallback((name: string) => {
+  // Create new session (with limit check)
+  const createNewSession = useCallback((name: string): { success: true; session: Session } | { success: false; reason: 'limit_reached'; current: number; max: number } => {
+    // Check session limit
+    if (!canCreateSession()) {
+      return {
+        success: false,
+        reason: 'limit_reached',
+        current: getSessionCount(),
+        max: MAX_SESSION_COUNT,
+      };
+    }
+
     // Save current session first
     if (session) {
       saveSession(session);
@@ -132,7 +145,7 @@ export function useSession() {
     addToSessionList(newSession);
     setSession(newSession);
     setCurrentSessionId(newSession.id);
-    return newSession;
+    return { success: true, session: newSession };
   }, [session]);
 
   // Rename current session
@@ -151,9 +164,9 @@ export function useSession() {
 
   // Activity recording functions
   const recordSearch = useCallback(
-    (query: string, resultCount: number) => {
+    (query: string, resultCount: number, searchResults: Paper[]) => {
       updateWithActivity('search', { query, resultCount });
-      updateState({ query });
+      updateState({ query, searchResults });
 
       // Auto-rename if default name
       setSession((prev) => {
@@ -166,6 +179,14 @@ export function useSession() {
       });
     },
     [updateWithActivity, updateState]
+  );
+
+  // Update search results only (without activity)
+  const updateSearchResults = useCallback(
+    (searchResults: Paper[]) => {
+      updateState({ searchResults });
+    },
+    [updateState]
   );
 
   const recordPaperSelected = useCallback(
@@ -287,6 +308,7 @@ export function useSession() {
     updateContextSummary,
     updateAssistantActive,
     updateSortBy,
+    updateSearchResults,
     syncFromSession,
   };
 }

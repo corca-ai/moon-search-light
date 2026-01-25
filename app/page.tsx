@@ -60,6 +60,7 @@ export default function Home() {
     updateInterestSummary: updateSessionInterestSummary,
     updateAssistantActive: updateSessionAssistantActive,
     updateSortBy: updateSessionSortBy,
+    updateSearchResults,
     switchSession,
   } = useSession();
 
@@ -96,6 +97,15 @@ export default function Home() {
       setInterestSummary(state.interestSummary);
       setChatMessages(state.chatMessages);
       setAssistantActive(state.assistantActive);
+      // Restore search results
+      const searchResults = state.searchResults || [];
+      setAllPapers(searchResults);
+      // Calculate candidate papers (not selected, not excluded)
+      const selectedIds = new Set(state.selectedPapers.map(p => p.paperId));
+      const excludedIds = new Set(state.excludedPapers.map(p => p.paperId));
+      const candidates = searchResults.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
+      setCandidatePapers(candidates.slice(0, 20));
+      setDisplayCount(20);
       refreshSessionList();
     }
   }, [session?.id, isSessionLoading]);
@@ -122,37 +132,59 @@ export default function Home() {
 
   // Handle create new session
   const handleCreateNewSession = () => {
-    const name = prompt('새 연구 노트 이름을 입력하세요:', '새 연구');
-    if (name) {
-      createNewSession(name);
-      // Clear state for new session
-      setQuery('');
-      setSelectedPapers([]);
-      setCandidatePapers([]);
-      setExcludedPapers([]);
-      setAllPapers([]);
-      setAnalyses({});
-      setTranslations({});
-      setChatMessages([]);
-      setAssistantActive(false);
-      setInterestSummary('');
-      setDisplayCount(20);
-      setAnalyzedPaperIds([]);
-      refreshSessionList();
+    const result = createNewSession('새 연구');
 
-      posthog.capture('note_created', { note_name: name });
+    if (!result.success) {
+      // Session limit reached
+      alert(`연구 노트는 최대 ${result.max}개까지 저장할 수 있습니다.\n기존 노트를 삭제한 후 다시 시도해주세요.`);
+      posthog.capture('note_creation_blocked', {
+        reason: 'limit_reached',
+        current_count: result.current,
+        max_count: result.max,
+      });
+      return;
     }
+
+    // Clear state for new session
+    setQuery('');
+    setSelectedPapers([]);
+    setCandidatePapers([]);
+    setExcludedPapers([]);
+    setAllPapers([]);
+    setAnalyses({});
+    setTranslations({});
+    setChatMessages([]);
+    setAssistantActive(false);
+    setInterestSummary('');
+    setDisplayCount(20);
+    setAnalyzedPaperIds([]);
+    refreshSessionList();
+
+    posthog.capture('note_created', { note_name: result.session.name });
   };
 
   // Handle delete session
   const handleDeleteSession = (id: string) => {
     if (session?.id === id) {
-      // Cannot delete current session, create new one first
-      const newSession = createNewSession('새 연구');
-      if (newSession) {
-        removeSession(id);
-        refreshSessionList();
+      // Cannot delete current session, delete first then create new
+      removeSession(id);
+      const result = createNewSession('새 연구');
+      if (result.success) {
+        // Clear state for new session
+        setQuery('');
+        setSelectedPapers([]);
+        setCandidatePapers([]);
+        setExcludedPapers([]);
+        setAllPapers([]);
+        setAnalyses({});
+        setTranslations({});
+        setChatMessages([]);
+        setAssistantActive(false);
+        setInterestSummary('');
+        setDisplayCount(20);
+        setAnalyzedPaperIds([]);
       }
+      refreshSessionList();
     } else {
       removeSession(id);
       refreshSessionList();
@@ -232,8 +264,8 @@ export default function Home() {
       setTotal(data.total);
       addSystemMessage(`"${query}" 검색 → ${papers.length}개 결과`);
 
-      // Record activity
-      recordSearch(query, papers.length);
+      // Record activity with search results
+      recordSearch(query, papers.length, papers);
 
       // PostHog: Track paper search
       posthog.capture('paper_searched', {

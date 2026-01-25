@@ -1,4 +1,20 @@
-import { Session, SessionListItem, STORAGE_KEYS } from '../types/session';
+import { Session, SessionListItem, STORAGE_KEYS, MAX_SESSION_COUNT } from '../types/session';
+
+// Get session count
+export function getSessionCount(): number {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.SESSION_LIST);
+    if (!data) return 0;
+    return (JSON.parse(data) as SessionListItem[]).length;
+  } catch {
+    return 0;
+  }
+}
+
+// Check if can create new session
+export function canCreateSession(): boolean {
+  return getSessionCount() < MAX_SESSION_COUNT;
+}
 
 // Get all session list items
 export function getSessionList(): SessionListItem[] {
