@@ -134,9 +134,17 @@ export default function Home() {
           const citationsA = a.citationCount || 0;
           const citationsB = b.citationCount || 0;
 
-          // 연도 점수: 최근 5년 내 논문에 가중치 (0~1)
-          const yearScoreA = Math.min(1, Math.max(0, (yearA - (currentYear - 5)) / 5));
-          const yearScoreB = Math.min(1, Math.max(0, (yearB - (currentYear - 5)) / 5));
+          // 연도 점수: 구간별 가중치
+          const getYearScore = (year: number) => {
+            const age = currentYear - year;
+            if (age <= 5) return 1.0;      // 0-5년: 최고 가중치
+            if (age <= 10) return 0.6;     // 5-10년: 중간 가중치
+            if (age <= 15) return 0.3;     // 10-15년: 낮은 가중치
+            return 0.1;                     // 15년+: 최소 가중치
+          };
+
+          const yearScoreA = getYearScore(yearA);
+          const yearScoreB = getYearScore(yearB);
 
           // 인용수 점수: 로그 스케일로 정규화 (영향력 있는 논문)
           const citationScoreA = Math.log10(citationsA + 1) / 5;
