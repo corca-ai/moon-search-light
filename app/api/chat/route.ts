@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
 ## 응답 가이드라인
 - 한국어로 응답하세요
 - 구체적이고 실행 가능한 제안을 하세요
-- 마크다운 형식을 사용하여 가독성을 높이세요
 - 필요시 논문 인용을 명확히 하세요
-- 연구 계획서 작성 요청 시 체계적인 구조로 작성하세요`;
+- 모든 응답은 500글자 이하로 하세요.
+- 필요하면 질문하여 요청을 구체화하세요`;
 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
