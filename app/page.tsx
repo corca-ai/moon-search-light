@@ -137,9 +137,10 @@ export default function Home() {
           // 연도 점수: 구간별 가중치
           const getYearScore = (year: number) => {
             const age = currentYear - year;
-            if (age <= 5) return 1.0;      // 0-5년: 최고 가중치
-            if (age <= 10) return 0.6;     // 5-10년: 중간 가중치
-            if (age <= 15) return 0.3;     // 10-15년: 낮은 가중치
+            if (age <= 1) return 1.0;      // 0-1년: 최고 가중치
+            if (age <= 5) return 0.8;      // 1-5년: 높은 가중치
+            if (age <= 10) return 0.5;     // 5-10년: 중간 가중치
+            if (age <= 15) return 0.25;    // 10-15년: 낮은 가중치
             return 0.1;                     // 15년+: 최소 가중치
           };
 
