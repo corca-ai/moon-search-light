@@ -44,6 +44,8 @@ export default function Home() {
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
   const [interestSummary, setInterestSummary] = useState('');
+  const [allPapers, setAllPapers] = useState<Paper[]>([]);
+  const [displayCount, setDisplayCount] = useState(20);
 
   const addSystemMessage = (message: string) => {
     if (assistantActive) {
@@ -58,6 +60,7 @@ export default function Home() {
     setLoading(true);
     setError('');
     setExcludedPapers([]);
+    setDisplayCount(20); // 새 검색 시 초기화
 
     try {
       const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
@@ -65,7 +68,7 @@ export default function Home() {
 
       if (!response.ok) throw new Error(data.error || 'Failed to fetch papers');
 
-      const papers = [...(data.papers || [])];
+      const papers = [...(data.allPapers || data.papers || [])];
 
       if (papers.length > 0) {
         const titles = papers.map(p => p.title);
@@ -86,11 +89,13 @@ export default function Home() {
         }
       }
 
-      setCandidatePapers(papers);
+      setAllPapers(papers);
+      setCandidatePapers(papers.slice(0, 20));
       setTotal(data.total);
       addSystemMessage(`"${query}" 검색 → ${papers.length}개 결과`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
+      setAllPapers([]);
       setCandidatePapers([]);
     } finally {
       setLoading(false);
@@ -119,6 +124,16 @@ export default function Home() {
     setCandidatePapers([...candidatePapers, paper]);
     setExcludedPapers(excludedPapers.filter(p => p.paperId !== paper.paperId));
     addSystemMessage(`복원: ${paper.title.slice(0, 40)}...`);
+  };
+
+  const loadMorePapers = () => {
+    const newCount = displayCount + 20;
+    setDisplayCount(newCount);
+    // 제외된 논문과 선택된 논문을 필터링
+    const selectedIds = new Set(selectedPapers.map(p => p.paperId));
+    const excludedIds = new Set(excludedPapers.map(p => p.paperId));
+    const availablePapers = allPapers.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
+    setCandidatePapers(availablePapers.slice(0, newCount));
   };
 
   const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
@@ -630,6 +645,20 @@ ${summary.researchLandscape}
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                   <p className="text-base">검색어를 입력하세요</p>
+                </div>
+              )}
+              {/* 더 보기 버튼 */}
+              {candidatePapers.length > 0 && candidatePapers.length < allPapers.length - selectedPapers.length - excludedPapers.length && (
+                <div className="flex justify-center pt-4 pb-2">
+                  <button
+                    onClick={loadMorePapers}
+                    className={`${styles.button.secondary} flex items-center gap-2`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    더 보기 ({allPapers.length - selectedPapers.length - excludedPapers.length - candidatePapers.length}개 남음)
+                  </button>
                 </div>
               )}
             </div>
