@@ -32,22 +32,35 @@ Semantic Scholar API와 OpenAI를 활용한 논문 검색, 분석, 후속 연구
 ## 2. 화면 구성
 
 ### 2.1 전체 레이아웃
-- 최대 너비: `max-w-7xl` (1280px)
+- **좌우 레이아웃**: 사이드바(좌측) + 메인 콘텐츠(우측)
+- 메인 콘텐츠 최대 너비: `max-w-6xl`
 - 전체 높이: 뷰포트 100% 사용
-- **상하 레이아웃**: 선택 영역(상단) + 검색/Assistant 영역(하단)
+- 메인 콘텐츠 내부: **상하 레이아웃** (선택 영역 + 검색/Assistant 영역)
 
-### 2.2 헤더 영역
-- 좌측: 타이틀 "moon-search-light" + 부제 "논문 탐색 도구"
-- 우측:
+### 2.2 사이드바 (좌측)
+- **펼침 상태**: 폭 256px
+  - 상단: 🌙 로고 + 타이틀 "Moon Search Light" + 접기 버튼
+  - 연구 노트 섹션: 노트 목록 + 새 노트 버튼
+  - 하단: 노트 개수 표시
+- **접힘 상태**: 폭 56px
+  - 로고 아이콘만 표시
+  - 펼침 버튼
+  - 현재 노트 아이콘
+  - 새 노트 버튼
+- **노트 항목**: 이름, 논문 수, 수정일 표시
+- **컨텍스트 메뉴**: 이름 변경, 삭제
+
+### 2.3 헤더 영역 (메인 콘텐츠)
+- 우측 정렬:
   - "연구 개요 다운로드" 버튼 (Assistant 활성 + 대화 있을 때)
   - "연구 시작" 버튼 (논문 선택 시) / "← 검색으로" 버튼 (Assistant 활성 시)
 
-### 2.3 선택됨 영역 (상단)
+### 2.4 선택됨 영역 (메인 콘텐츠 상단)
 - **선택된 논문**: 수평 스크롤 카드 목록
 - **제외됨**: 접기/펼치기 토글 (▸/▼)
 - **관심 주제 요약**: AI 분석 결과 표시 (명사형 종결)
 
-### 2.4 검색/Assistant 영역 (하단)
+### 2.5 검색/Assistant 영역 (메인 콘텐츠 하단)
 
 **Assistant 비활성 시**
 - 검색창 (검색 아이콘 포함) + Semantic Scholar 설명
@@ -299,7 +312,84 @@ score = yearScore * 0.6 + citationScore * 0.4
 
 ---
 
-## 12. API 엔드포인트
+## 12. 연구 노트 (Session)
+
+### 12.1 개요
+
+사용자의 논문 탐색 과정을 **"연구 노트"**로 저장하고 관리하는 기능.
+
+> **용어**: 코드에서는 `Session`, UI에서는 "연구 노트"
+
+### 12.2 데이터 구조
+
+**활동 타입 (ActivityType)**
+```typescript
+type ActivityType =
+  | 'search'           // 검색 수행
+  | 'paper_selected'   // 논문 선택
+  | 'paper_excluded'   // 논문 제외
+  | 'paper_restored'   // 논문 복원
+  | 'analysis_done'    // AI 분석 완료
+  | 'translation_done' // 번역 완료
+  | 'chat_user'        // 사용자 채팅
+  | 'chat_assistant'   // 어시스턴트 답변
+  | 'note_created'     // 노트 생성
+  | 'note_renamed';    // 노트 이름 변경
+```
+
+**세션 구조 (Session)**
+```typescript
+interface Session {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  state: SessionState;      // 현재 상태 스냅샷
+  activities: ActivityEvent[]; // 활동 기록 (최대 10개)
+  version: string;
+}
+
+interface SessionState {
+  query: string;
+  sortBy: string;
+  selectedPapers: Paper[];
+  excludedPapers: Paper[];
+  analyses: Record<string, Analysis>;
+  translations: Record<string, string>;
+  chatMessages: ChatMessage[];
+  assistantActive: boolean;
+}
+```
+
+### 12.3 저장 전략
+
+**저장소**: LocalStorage
+- `moonlight_session_list`: SessionListItem[]
+- `moonlight_session_{id}`: Session
+- `moonlight_current_session_id`: 현재 세션 ID
+
+**활동 기록 제한**
+- 최대 10개 활동 유지
+- 초과 시 가장 오래된 활동 삭제 (FIFO)
+
+**자동 저장**
+- Debounce 1초로 빈번한 저장 방지
+- `beforeunload` 이벤트로 종료 시 저장
+
+### 12.4 첫 사용자 경험
+
+- 앱 첫 실행 시 "새 연구" 노트 자동 생성
+- 첫 검색 수행 시 검색어로 노트 이름 자동 설정
+
+### 12.5 노트 전환 시 동작
+
+- 현재 노트 자동 저장
+- 새 노트 상태로 UI 전체 갱신
+- 검색 결과 초기화
+
+---
+
+## 13. API 엔드포인트
 
 | 경로 | 용도 |
 |------|------|
@@ -313,7 +403,7 @@ score = yearScore * 0.6 + citationScore * 0.4
 
 ---
 
-## 13. 컴포넌트 구조
+## 14. 컴포넌트 구조
 
 ```
 app/
@@ -322,12 +412,20 @@ app/
 ├── globals.css                 # 글로벌 스타일, Pretendard 폰트, 애니메이션
 ├── components/
 │   ├── styles.ts              # 공통 스타일 상수 (slate 색상 계열)
+│   ├── NoteSidebar.tsx        # 연구 노트 사이드바 (접힘 기능)
 │   ├── HorizontalPaperCard.tsx # 수평 논문 카드
 │   ├── SearchResultCard.tsx    # 검색 결과 카드
 │   ├── SelectedPapersSection.tsx # 선택됨 영역
 │   └── PaperDetailModal.tsx    # 논문 상세 모달
+├── types/
+│   └── session.ts             # 세션/활동 타입 정의
+├── hooks/
+│   ├── useSession.ts          # 현재 세션 관리 훅
+│   └── useSessionList.ts      # 세션 목록 관리 훅
 ├── lib/
-│   └── posthog-server.ts      # 서버 사이드 PostHog 클라이언트
+│   ├── posthog-server.ts      # 서버 사이드 PostHog 클라이언트
+│   ├── session-storage.ts     # 세션 저장/불러오기
+│   └── session-list.ts        # 세션 목록 관리
 └── api/
     ├── search/route.ts
     ├── summarize/route.ts
@@ -340,52 +438,222 @@ app/
 
 ---
 
-## 14. 디자인
+## 15. 디자인 스타일 가이드
 
-### 13.1 폰트
+### 15.1 디자인 원칙
+
+**전문성 (Professional)**
+- 학술 연구 도구에 적합한 절제된 디자인
+- 이모지 사용 금지, SVG 아이콘 사용
+- 명확한 시각적 계층 구조
+
+**일관성 (Consistency)**
+- Slate 색상 팔레트 통일
+- 동일한 라운드 코너 (rounded-md, rounded-lg)
+- 일관된 간격 체계 (4px 단위)
+
+**접근성 (Accessibility)**
+- 충분한 색상 대비
+- 다크 모드 완전 지원
+- 포커스 상태 명확히 표시
+
+---
+
+### 15.2 타이포그래피
+
+**폰트**
 - **Pretendard Variable**: 본문 및 UI 전체
 - CDN: `cdn.jsdelivr.net/gh/orioncactus/pretendard`
 
-### 13.2 컬러 테마
-- **Slate 계열** 기반 (gray → slate 전환)
-- 라이트 모드: 흰색 배경 (`bg-white`)
-- 다크 모드: 어두운 슬레이트 배경 (`dark:bg-slate-900`)
-- 액센트: indigo 계열
+**폰트 크기**
+| 용도 | 크기 | 클래스 |
+|------|------|--------|
+| 제목 (H1) | 18px | `text-lg font-semibold` |
+| 부제목 | 14px | `text-sm font-medium` |
+| 본문 | 14px | `text-sm` |
+| 캡션/라벨 | 12px | `text-xs` |
+| 섹션 라벨 | 12px | `text-xs uppercase tracking-wider` |
 
-### 13.3 스타일 상수 (styles.ts)
+**폰트 굵기**
+- Regular (400): 본문
+- Medium (500): 라벨, 메타 정보
+- Semibold (600): 제목, 강조
+
+---
+
+### 15.3 색상 시스템
+
+**기본 팔레트: Slate**
+
+| 용도 | 라이트 모드 | 다크 모드 |
+|------|------------|----------|
+| 배경 (Primary) | `slate-50` | `slate-900` |
+| 배경 (Secondary) | `slate-100` | `slate-800` |
+| 배경 (Tertiary) | `slate-200` | `slate-700` |
+| 카드 배경 | `white` | `slate-800` |
+| 테두리 | `slate-200` ~ `slate-300` | `slate-700` ~ `slate-800` |
+
+**텍스트 색상**
+
+| 계층 | 라이트 모드 | 다크 모드 | 용도 |
+|------|------------|----------|------|
+| Primary | `slate-900` | `slate-100` | 제목, 주요 텍스트 |
+| Secondary | `slate-700` | `slate-300` | 본문, 설명 |
+| Tertiary | `slate-600` | `slate-400` | 보조 정보 |
+| Muted | `slate-500` | `slate-500` | 비활성, 힌트 |
+| Disabled | `slate-400` | `slate-600` | 비활성 요소 |
+
+**상태 색상**
+- 선택/활성: `slate-200` / `slate-800`
+- 호버: `slate-100` / `slate-800/50`
+- 포커스 링: `slate-400` / `slate-500`
+- 에러: `red-600` / `red-400`
+
+---
+
+### 15.4 아이콘 시스템
+
+**스타일**
+- SVG 기반, stroke 스타일
+- `strokeWidth="1.5"` 통일
+- 크기: `w-4 h-4` (16px), `w-5 h-5` (20px)
+
+**주요 아이콘**
+| 아이콘 | 용도 |
+|--------|------|
+| Moon | 로고/브랜드 |
+| Folder | 연구 노트 |
+| Search | 검색 |
+| Plus | 추가/생성 |
+| ChevronLeft/Right | 사이드바 접기/펼치기 |
+| MoreVertical | 컨텍스트 메뉴 |
+| Star | 선택 |
+| X | 제외/닫기 |
+| Download | 다운로드 |
+| ArrowRight | 진행/이동 |
+
+---
+
+### 15.5 컴포넌트 스타일
+
+**버튼**
 ```typescript
 button: {
-  primary: 'bg-slate-900 text-white rounded-lg hover:scale-[1.02]',
-  secondary: 'border border-slate-200 rounded-lg hover:bg-slate-50',
-  icon: 'p-2 rounded-lg hover:bg-slate-100',
+  primary: 'px-5 py-2.5 bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 rounded-md font-medium hover:bg-slate-700 dark:hover:bg-slate-200 transition-colors',
+  primarySmall: 'px-4 py-2 text-sm bg-slate-800 dark:bg-slate-100 text-white dark:text-slate-900 rounded-md font-medium',
+  secondary: 'px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 font-medium',
+  ghost: 'px-3 py-1.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-md font-medium',
+  icon: 'p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400',
+  iconSmall: 'p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400',
 }
-card: {
-  base: 'bg-white border border-slate-200 rounded-xl shadow-sm',
-  hover: 'hover:shadow-md hover:border-slate-300 transition-all',
-}
-text: {
-  primary: 'text-slate-900 dark:text-white',
-  secondary: 'text-slate-700 dark:text-slate-300',
-  link: 'text-indigo-600 hover:underline',
-  accent: 'text-indigo-600 dark:text-indigo-400',
-}
-tag: 'bg-indigo-50 text-indigo-600 rounded-full'
 ```
 
-### 13.4 애니메이션
-- `animate-fade-in`: 카드 등장
-- `animate-scale-in`: 모달 등장
-- `animate-pulse`: 분석 중 상태
-- `animate-bounce`: 타이핑 인디케이터
+**카드**
+```typescript
+card: {
+  base: 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm',
+  hover: 'hover:shadow-md hover:border-slate-400 dark:hover:border-slate-600 transition-all',
+  withPadding: 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm p-4',
+}
+```
 
-### 13.5 레이아웃 간격
+**입력 필드**
+```typescript
+input: {
+  base: 'w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-slate-400 dark:focus:ring-slate-500 placeholder:text-slate-400',
+}
+```
+
+**태그**
+```typescript
+tag: 'px-2.5 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-xs font-medium border border-slate-300 dark:border-slate-600'
+```
+
+---
+
+### 15.6 사이드바 스타일
+
+**구조**
+- 펼침 상태: `w-60` (240px)
+- 접힘 상태: `w-14` (56px)
+- 헤더 높이: `h-14` (56px)
+
+**색상**
+- 배경: `bg-slate-50 dark:bg-slate-900`
+- 테두리: `border-slate-200 dark:border-slate-800`
+- 선택된 항목: `bg-slate-200 dark:bg-slate-800`
+- 호버: `hover:bg-slate-100 dark:hover:bg-slate-800/50`
+
+**타이포그래피**
+- 로고: `text-sm font-semibold tracking-tight`
+- 섹션 라벨: `text-xs font-medium uppercase tracking-wider`
+- 노트 이름: `text-sm`, 선택 시 `font-medium`
+- 메타 정보: `text-xs text-slate-400`
+
+---
+
+### 15.7 레이아웃
+
+**간격 체계**
+| 크기 | 값 | 용도 |
+|------|-----|------|
+| xs | 4px | 아이콘-텍스트 간격 |
+| sm | 8px | 인라인 요소 간격 |
+| md | 12px | 컴포넌트 내부 패딩 |
+| lg | 16px | 섹션 패딩 |
+| xl | 20px | 섹션 간 간격 |
+
+**레이아웃 패턴**
 - 섹션 간격: `space-y-5`
 - 카드 간격: `space-y-4`, `gap-3`
+- 리스트 간격: `space-y-0.5`
 - 수평 스크롤: `overflow-x-auto scrollbar-thin`
 
 ---
 
-## 15. 관련 문서
+### 15.8 애니메이션
+
+**트랜지션**
+- 기본: `transition-colors duration-150`
+- 전체: `transition-all duration-150`
+
+**커스텀 애니메이션**
+| 이름 | 용도 |
+|------|------|
+| `animate-fade-in` | 요소 등장 |
+| `animate-scale-in` | 모달 등장 |
+| `animate-pulse` | 로딩/분석 중 |
+| `animate-bounce` | 타이핑 인디케이터 |
+
+---
+
+### 15.9 반응형 디자인
+
+**브레이크포인트**
+- 최소 지원: 1024px (데스크탑)
+- 최대 콘텐츠 너비: `max-w-6xl` (1152px)
+
+**사이드바**
+- 접힘/펼침 토글로 공간 확보
+- 접힘 시 아이콘만 표시
+
+---
+
+### 15.10 다크 모드
+
+**구현 방식**
+- Tailwind `dark:` 프리픽스 사용
+- 시스템 설정 자동 감지
+
+**색상 반전 원칙**
+- 배경: 밝음 → 어두움
+- 텍스트: 어두움 → 밝음
+- 테두리: 동일 계열 유지 (slate)
+- 그림자: 다크 모드에서 약화
+
+---
+
+## 16. 관련 문서
 
 - [README.md](../README.md) - 프로젝트 소개 및 빠른 시작
 - [POSTHOG.md](./POSTHOG.md) - PostHog 분석 통합 설정 보고서

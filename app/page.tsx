@@ -7,21 +7,11 @@ import type { Paper } from './api/search/route';
 import { SelectedPapersSection } from './components/SelectedPapersSection';
 import { SearchResultCard } from './components/SearchResultCard';
 import { PaperDetailModal } from './components/PaperDetailModal';
+import { NoteSidebar } from './components/NoteSidebar';
 import { styles } from './components/styles';
-
-interface PaperAnalysis {
-  overview: string;
-  goals: string;
-  method: string;
-  results: string;
-  keywords: string[];
-}
-
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp?: number;
-}
+import { useSession } from './hooks/useSession';
+import { useSessionList } from './hooks/useSessionList';
+import type { PaperAnalysis, ChatMessage } from './types/session';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -53,6 +43,35 @@ export default function Home() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailInput, setEmailInput] = useState('');
 
+  // Session management
+  const {
+    session,
+    isLoading: isSessionLoading,
+    createNewSession,
+    renameSession,
+    recordSearch,
+    recordPaperSelected,
+    recordPaperExcluded,
+    recordPaperRestored,
+    recordAnalysisDone,
+    recordTranslationDone,
+    recordChatUser,
+    recordChatAssistant,
+    updateInterestSummary: updateSessionInterestSummary,
+    updateAssistantActive: updateSessionAssistantActive,
+    updateSortBy: updateSessionSortBy,
+    switchSession,
+  } = useSession();
+
+  const {
+    sessionList,
+    refresh: refreshSessionList,
+    load: loadSessionById,
+    remove: removeSession,
+    rename: renameSessionInList,
+  } = useSessionList();
+
+
   // Check localStorage for email on mount
   useEffect(() => {
     const storedEmail = localStorage.getItem('userEmail');
@@ -63,6 +82,93 @@ export default function Home() {
       setShowEmailModal(true);
     }
   }, []);
+
+  // Restore state from session when loaded
+  useEffect(() => {
+    if (session && !isSessionLoading) {
+      const state = session.state;
+      setQuery(state.query);
+      setSortBy(state.sortBy as typeof sortBy);
+      setSelectedPapers(state.selectedPapers);
+      setExcludedPapers(state.excludedPapers);
+      setAnalyses(state.analyses);
+      setTranslations(state.translations);
+      setInterestSummary(state.interestSummary);
+      setChatMessages(state.chatMessages);
+      setAssistantActive(state.assistantActive);
+      refreshSessionList();
+    }
+  }, [session?.id, isSessionLoading]);
+
+  // Handle session switch
+  const handleSessionSwitch = (id: string) => {
+    const loadedSession = loadSessionById(id);
+    if (loadedSession) {
+      // Clear current state
+      setCandidatePapers([]);
+      setAllPapers([]);
+      setDisplayCount(20);
+      setAnalyzedPaperIds([]);
+      // Switch session (will trigger useEffect above)
+      switchSession(loadedSession);
+      refreshSessionList();
+
+      posthog.capture('note_switched', {
+        note_id: id,
+        note_name: loadedSession.name,
+      });
+    }
+  };
+
+  // Handle create new session
+  const handleCreateNewSession = () => {
+    const name = prompt('새 연구 노트 이름을 입력하세요:', '새 연구');
+    if (name) {
+      createNewSession(name);
+      // Clear state for new session
+      setQuery('');
+      setSelectedPapers([]);
+      setCandidatePapers([]);
+      setExcludedPapers([]);
+      setAllPapers([]);
+      setAnalyses({});
+      setTranslations({});
+      setChatMessages([]);
+      setAssistantActive(false);
+      setInterestSummary('');
+      setDisplayCount(20);
+      setAnalyzedPaperIds([]);
+      refreshSessionList();
+
+      posthog.capture('note_created', { note_name: name });
+    }
+  };
+
+  // Handle delete session
+  const handleDeleteSession = (id: string) => {
+    if (session?.id === id) {
+      // Cannot delete current session, create new one first
+      const newSession = createNewSession('새 연구');
+      if (newSession) {
+        removeSession(id);
+        refreshSessionList();
+      }
+    } else {
+      removeSession(id);
+      refreshSessionList();
+    }
+    posthog.capture('note_deleted', { note_id: id });
+  };
+
+  // Handle rename session
+  const handleRenameSession = (id: string, newName: string) => {
+    renameSessionInList(id, newName);
+    if (session?.id === id) {
+      renameSession(newName);
+    }
+    refreshSessionList();
+    posthog.capture('note_renamed', { note_id: id, new_name: newName });
+  };
 
   const handleEmailSubmit = () => {
     const email = emailInput.trim();
@@ -126,6 +232,9 @@ export default function Home() {
       setTotal(data.total);
       addSystemMessage(`"${query}" 검색 → ${papers.length}개 결과`);
 
+      // Record activity
+      recordSearch(query, papers.length);
+
       // PostHog: Track paper search
       posthog.capture('paper_searched', {
         query: query,
@@ -146,9 +255,13 @@ export default function Home() {
   };
 
   const moveToSelected = (paper: Paper) => {
-    setSelectedPapers([...selectedPapers, paper]);
+    const newSelected = [...selectedPapers, paper];
+    setSelectedPapers(newSelected);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
     addSystemMessage(`선택: ${paper.title.slice(0, 40)}...`);
+
+    // Record activity
+    recordPaperSelected(paper, newSelected);
 
     // PostHog: Track paper selection
     posthog.capture('paper_selected', {
@@ -156,7 +269,7 @@ export default function Home() {
       paper_title: paper.title,
       paper_year: paper.year,
       citation_count: paper.citationCount,
-      selected_papers_count: selectedPapers.length + 1,
+      selected_papers_count: newSelected.length,
     });
   };
 
@@ -167,22 +280,31 @@ export default function Home() {
   };
 
   const excludePaper = (paper: Paper) => {
-    setExcludedPapers([...excludedPapers, paper]);
+    const newExcluded = [...excludedPapers, paper];
+    setExcludedPapers(newExcluded);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
     addSystemMessage(`제외: ${paper.title.slice(0, 40)}...`);
+
+    // Record activity
+    recordPaperExcluded(paper, newExcluded);
 
     // PostHog: Track paper exclusion
     posthog.capture('paper_excluded', {
       paper_id: paper.paperId,
       paper_title: paper.title,
-      excluded_papers_count: excludedPapers.length + 1,
+      excluded_papers_count: newExcluded.length,
     });
   };
 
   const restorePaper = (paper: Paper) => {
-    setCandidatePapers([...candidatePapers, paper]);
-    setExcludedPapers(excludedPapers.filter(p => p.paperId !== paper.paperId));
+    const newCandidates = [...candidatePapers, paper];
+    const newExcluded = excludedPapers.filter(p => p.paperId !== paper.paperId);
+    setCandidatePapers(newCandidates);
+    setExcludedPapers(newExcluded);
     addSystemMessage(`복원: ${paper.title.slice(0, 40)}...`);
+
+    // Record activity
+    recordPaperRestored(paper, selectedPapers, newExcluded);
 
     // PostHog: Track paper restoration
     posthog.capture('paper_restored', {
@@ -269,7 +391,11 @@ export default function Home() {
       });
       if (response.ok) {
         const analysis = await response.json();
-        setAnalyses(prev => ({ ...prev, [paper.paperId]: analysis }));
+        setAnalyses(prev => {
+          const newAnalyses = { ...prev, [paper.paperId]: analysis };
+          recordAnalysisDone(paper.paperId, analysis, newAnalyses);
+          return newAnalyses;
+        });
       }
     } catch (err) {
       console.error('Failed to fetch analysis:', err);
@@ -314,7 +440,11 @@ export default function Home() {
 
       if (response.ok) {
         const { translation } = await response.json();
-        setTranslations(prev => ({ ...prev, [paperId]: translation }));
+        setTranslations(prev => {
+          const newTranslations = { ...prev, [paperId]: translation };
+          recordTranslationDone(paperId, newTranslations);
+          return newTranslations;
+        });
       }
     } catch (err) {
       console.error('Failed to translate:', err);
@@ -360,6 +490,7 @@ export default function Home() {
   const activateAssistant = async () => {
     if (!canActivateAssistant) return;
     setAssistantActive(true);
+    updateSessionAssistantActive(true);
 
     // PostHog: Track Research Assistant activation
     posthog.capture('research_assistant_activated', {
@@ -454,6 +585,7 @@ ${summary.researchLandscape}
 
   const deactivateAssistant = () => {
     setAssistantActive(false);
+    updateSessionAssistantActive(false);
     // 대화 내용 유지 (재활성화 시 기억)
   };
 
@@ -498,6 +630,7 @@ ${summary.researchLandscape}
         if (response.ok) {
           const { summary } = await response.json();
           setInterestSummary(summary);
+          updateSessionInterestSummary(summary);
         }
       } catch (err) {
         console.error('Failed to fetch interest summary:', err);
@@ -510,15 +643,19 @@ ${summary.researchLandscape}
   const sendChatMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
     const userMessage: ChatMessage = { role: 'user', content: chatInput };
-    setChatMessages(prev => [...prev, userMessage]);
+    const newMessages = [...chatMessages, userMessage];
+    setChatMessages(newMessages);
     setChatInput('');
     setChatLoading(true);
+
+    // Record activity
+    recordChatUser(chatInput, newMessages);
 
     // PostHog: Track chat message sent
     posthog.capture('chat_message_sent', {
       message_length: chatInput.length,
       selected_papers_count: selectedPapers.length,
-      chat_history_length: chatMessages.length + 1,
+      chat_history_length: newMessages.length,
     });
 
     try {
@@ -553,14 +690,20 @@ ${summary.researchLandscape}
             if (data.content) {
               assistantContent += data.content;
               setChatMessages(prev => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1] = { role: 'assistant', content: assistantContent };
-                return newMessages;
+                const updatedMessages = [...prev];
+                updatedMessages[updatedMessages.length - 1] = { role: 'assistant', content: assistantContent };
+                return updatedMessages;
               });
             }
           }
         }
       }
+
+      // Record assistant response
+      setChatMessages(prev => {
+        recordChatAssistant(assistantContent, prev);
+        return prev;
+      });
     } catch (err) {
       setChatMessages(prev => [...prev, { role: 'assistant', content: '오류가 발생했습니다.' }]);
     } finally {
@@ -621,48 +764,57 @@ ${summary.researchLandscape}
   };
 
   return (
-    <div className={`min-h-screen ${styles.bg.primary}`}>
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* 헤더 */}
-        <div className="mb-6 pb-4 border-b border-slate-200/50 dark:border-slate-700/50 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <h1 className={`text-lg font-semibold ${styles.text.primary}`}>moon-search-light</h1>
-            <span className={`text-sm ${styles.text.muted}`}>논문 탐색 도구</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {assistantActive && chatMessages.length > 1 && (
-              <button onClick={downloadResearchOverview} className={styles.button.secondary}>
-                <span className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  연구 개요 다운로드
-                </span>
-              </button>
-            )}
-            {assistantActive ? (
-              <button onClick={deactivateAssistant} className={styles.button.secondary}>
-                <span className="flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                  </svg>
-                  검색으로
-                </span>
-              </button>
-            ) : (
-              canActivateAssistant && (
-                <button onClick={activateAssistant} className={styles.button.primarySmall}>
+    <div className={`min-h-screen ${styles.bg.primary} flex`}>
+      {/* Left Sidebar */}
+      <NoteSidebar
+        currentSessionId={session?.id ?? null}
+        currentSessionName={session?.name ?? null}
+        sessionList={sessionList}
+        onSelect={handleSessionSwitch}
+        onCreate={handleCreateNewSession}
+        onRename={handleRenameSession}
+        onDelete={handleDeleteSession}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-hidden">
+        <div className="max-w-6xl mx-auto px-6 py-6 h-screen overflow-y-auto">
+          {/* 헤더 */}
+          <div className="mb-6 pb-4 border-b border-slate-200/50 dark:border-slate-700/50 flex justify-end items-center">
+            <div className="flex items-center gap-3">
+              {assistantActive && chatMessages.length > 1 && (
+                <button onClick={downloadResearchOverview} className={styles.button.secondary}>
                   <span className="flex items-center gap-2">
-                    연구 시작
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
+                    연구 개요 다운로드
                   </span>
                 </button>
-              )
-            )}
+              )}
+              {assistantActive ? (
+                <button onClick={deactivateAssistant} className={styles.button.secondary}>
+                  <span className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    검색으로
+                  </span>
+                </button>
+              ) : (
+                canActivateAssistant && (
+                  <button onClick={activateAssistant} className={styles.button.primarySmall}>
+                    <span className="flex items-center gap-2">
+                      연구 시작
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </span>
+                  </button>
+                )
+              )}
+            </div>
           </div>
-        </div>
 
         {!assistantActive ? (
           /* ===== Assistant 비활성: 상하 레이아웃 ===== */
@@ -732,6 +884,7 @@ ${summary.researchLandscape}
                 onChange={(e) => {
                   const newSort = e.target.value as typeof sortBy;
                   setSortBy(newSort);
+                  updateSessionSortBy(newSort);
                   const sortLabels: Record<string, string> = { relevance: '관련성', recommended: '추천순', 'year-desc': '최신순', citations: '인용순' };
                   addSystemMessage(`정렬 변경: ${sortLabels[newSort]}`);
 
@@ -918,6 +1071,7 @@ ${summary.researchLandscape}
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
