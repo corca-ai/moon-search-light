@@ -385,4 +385,11 @@ tag: 'bg-indigo-50 text-indigo-600 rounded-full'
 
 ---
 
+## 15. 관련 문서
+
+- [README.md](../README.md) - 프로젝트 소개 및 빠른 시작
+- [POSTHOG.md](./POSTHOG.md) - PostHog 분석 통합 설정 보고서
+
+---
+
 **Last Updated**: 2026-01-25

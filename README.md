@@ -79,9 +79,10 @@ npm run dev
 | `OPENAI_API_KEY` | OpenAI API 키 (필수) |
 | `S2_API_KEY` | Semantic Scholar API 키 (선택) |
 
-## 상세 스펙
+## 문서
 
-자세한 기능 명세는 [docs/SPEC.md](docs/SPEC.md)를 참조하세요.
+- [docs/SPEC.md](docs/SPEC.md) - 상세 기능 명세
+- [docs/POSTHOG.md](docs/POSTHOG.md) - PostHog 분석 통합 설정
 
 ## 라이선스
 
