@@ -20,20 +20,6 @@ Moon Search Light는 연구자들이 학술 논문을 효율적으로 검색하�
 - **시각적 프리뷰**: ArXiv 논문 스냅샷 이미지 제공
 - **Moonlight 연동**: ArXiv 논문을 Moonlight 뷰어에서 열람
 
-## 빠른 시작
-
-```bash
-# 의존성 설치
-npm install
-
-# 환경 변수 설정
-cp .env.example .env.local
-# OPENAI_API_KEY 설정
-
-# 개발 서버 실행
-npm run dev
-```
-
 ## 사용법
 
 ### 1. 논문 검색
@@ -64,28 +50,7 @@ npm run dev
 - 대화 진행 후 "연구 개요 다운로드" 버튼 클릭
 - 마크다운 파일로 저장
 
-## 기술 스택
-
-| 영역 | 기술 |
-|------|------|
-| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
-| UI | Pretendard 폰트, @tailwindcss/typography |
-| AI | OpenAI GPT-4o-mini, text-embedding-3-small |
-| 검색 | Semantic Scholar API |
-| 이미지 | Moonlight API |
-
-## 환경 변수
-
-| 변수 | 설명 |
-|------|------|
-| `OPENAI_API_KEY` | OpenAI API 키 (필수) |
-| `S2_API_KEY` | Semantic Scholar API 키 (선택) |
-
 ## 문서
 
 - [docs/SPEC.md](docs/SPEC.md) - 상세 기능 명세
 - [docs/POSTHOG.md](docs/POSTHOG.md) - PostHog 분석 통합 설정
-
-## 라이선스
-
-MIT
