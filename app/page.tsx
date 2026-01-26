@@ -40,6 +40,7 @@ export default function Home() {
   const [contextSummary, setContextSummary] = useState<ContextSummary | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isContextExpanded, setIsContextExpanded] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Email identification
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -575,7 +576,7 @@ export default function Home() {
 
   // 관심사 요약 업데이트 (디바운스)
   useEffect(() => {
-    if (selectedPapers.length === 0 && excludedPapers.length === 0) {
+    if (selectedPapers.length === 0) {
       setInterestSummary('');
       return;
     }
@@ -791,11 +792,13 @@ export default function Home() {
         onCreate={handleCreateNewSession}
         onRename={handleRenameSession}
         onDelete={handleDeleteSession}
+        isCollapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
       />
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
-        <div className={`${assistantActive ? 'max-w-4xl' : 'max-w-6xl'} mx-auto px-6 py-6 h-screen overflow-y-auto transition-all duration-300`}>
+        <div className={`${assistantActive && !sidebarCollapsed ? 'max-w-4xl' : 'max-w-6xl'} mx-auto px-6 py-6 h-screen overflow-y-auto transition-all duration-300`}>
           {/* 세션 타이틀 헤더 */}
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -971,8 +974,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Right Sidebar - Research Assistant (선택된 논문이 있을 때만 표시) */}
-      {selectedPapers.length > 0 && (
+      {/* Right Sidebar - Research Assistant */}
       <div className={`${assistantActive ? 'w-[560px]' : 'w-14'} border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col h-screen transition-all duration-300`}>
         {assistantActive ? (
           <>
@@ -1159,7 +1161,6 @@ export default function Home() {
           </button>
         )}
       </div>
-      )}
 
       {/* Modal */}
       {/* Image Modal */}

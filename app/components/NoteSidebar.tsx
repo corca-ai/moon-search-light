@@ -12,6 +12,8 @@ interface NoteSidebarProps {
   onCreate: () => void;
   onRename: (id: string, newName: string) => void;
   onDelete: (id: string) => void;
+  isCollapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }
 
 export function NoteSidebar({
@@ -22,8 +24,9 @@ export function NoteSidebar({
   onCreate,
   onRename,
   onDelete,
+  isCollapsed,
+  onCollapsedChange,
 }: NoteSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -97,7 +100,7 @@ export function NoteSidebar({
     return (
       <div className={`${styles.sidebar.container} ${styles.sidebar.containerCollapsed}`}>
         <button
-          onClick={() => setIsCollapsed(false)}
+          onClick={() => onCollapsedChange(false)}
           className={`${styles.sidebar.header} w-full justify-center hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer`}
           title="사이드바 펼치기"
         >
@@ -134,7 +137,7 @@ export function NoteSidebar({
           </h1>
         </div>
         <button
-          onClick={() => setIsCollapsed(true)}
+          onClick={() => onCollapsedChange(true)}
           className={styles.button.iconSmall}
           title="사이드바 접기"
         >

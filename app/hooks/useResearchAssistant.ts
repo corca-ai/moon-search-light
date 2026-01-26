@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import type { Paper } from '../api/search/route';
 import posthog from 'posthog-js';
 
@@ -67,13 +67,11 @@ export function useResearchAssistant({
 
     // 첫 활성화 시 안내 메시지 (기존 대화가 없을 때만)
     if (chatMessages.length === 0) {
-      const paperList = selectedPapers.length > 0
-        ? formatPaperList(selectedPapers)
-        : '선택된 논문이 없습니다.';
-
-      setChatMessages([{
-        role: 'assistant',
-        content: `**선택된 논문:** ${selectedPapers.length}개
+      if (selectedPapers.length > 0) {
+        const paperList = formatPaperList(selectedPapers);
+        setChatMessages([{
+          role: 'assistant',
+          content: `**선택된 논문:** ${selectedPapers.length}개
 ${paperList}
 
 무엇을 도와드릴까요? 예시:
@@ -82,7 +80,20 @@ ${paperList}
 - "연구 계획서 초안을 작성해줘"
 
 💡 상단의 "분석" 버튼을 클릭하면 통합 컨텍스트 분석을 수행합니다.`,
-      }]);
+        }]);
+      } else {
+        setChatMessages([{
+          role: 'assistant',
+          content: `안녕하세요! 연구 아이디어에 대해 자유롭게 대화해보세요.
+
+예시:
+- "이런 연구 주제에 관심이 있어"
+- "연구 방향을 잡는데 도움이 필요해"
+- "이 분야의 트렌드가 궁금해"
+
+💡 논문을 검색하고 선택하면 더 구체적인 분석이 가능합니다.`,
+        }]);
+      }
     }
   }, [
     selectedPapers,
@@ -135,14 +146,6 @@ ${paperList}
     setIsActive(false);
     setIsLoading(false);
   }, []);
-
-  // 선택된 논문이 없으면 자동 비활성화
-  useEffect(() => {
-    if (selectedPapers.length < 1 && isActive) {
-      deactivate();
-      reset();
-    }
-  }, [selectedPapers.length, isActive, deactivate, reset]);
 
   return {
     isActive,
