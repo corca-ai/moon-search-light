@@ -11,6 +11,14 @@ export const styles = {
     iconSmall: 'p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200',
   },
 
+  // 탭 (일체화 스타일)
+  tab: {
+    container: 'flex border-b border-slate-200 dark:border-slate-700',
+    active: 'px-5 py-3 text-sm font-medium text-slate-900 dark:text-slate-100 border-b-2 border-slate-800 dark:border-slate-200 -mb-px transition-all duration-150',
+    inactive: 'px-5 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-all duration-150',
+    disabled: 'px-5 py-3 text-sm font-medium text-slate-400 dark:text-slate-600 cursor-not-allowed',
+  },
+
   // 카드
   card: {
     base: 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg shadow-sm',
@@ -46,4 +54,30 @@ export const styles = {
 
   // 구분선
   divider: 'border-slate-300 dark:border-slate-700',
+
+  // 사이드바
+  sidebar: {
+    container: 'h-screen flex flex-col bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800',
+    containerCollapsed: 'w-14 items-center',
+    containerExpanded: 'w-60 relative z-10',
+    header: 'h-14 px-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800',
+    section: 'px-3 py-3 flex items-center justify-between',
+    sectionLabel: 'text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider',
+    list: 'flex-1 overflow-y-auto px-2',
+    item: 'relative group rounded-lg transition-colors',
+    itemActive: 'bg-slate-200 dark:bg-slate-800',
+    itemInactive: 'hover:bg-slate-100 dark:hover:bg-slate-800/50',
+    itemText: 'text-sm truncate',
+    itemTextActive: 'text-slate-800 dark:text-slate-100 font-medium',
+    itemTextInactive: 'text-slate-600 dark:text-slate-300',
+    itemMeta: 'text-xs text-slate-400 dark:text-slate-500',
+    footer: 'px-4 py-3 border-t border-slate-200 dark:border-slate-800',
+  },
+
+  // 드롭다운 메뉴
+  dropdown: {
+    menu: 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1',
+    item: 'w-full px-3 py-1.5 text-left text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700',
+    itemDanger: 'w-full px-3 py-1.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-slate-50 dark:hover:bg-slate-700',
+  },
 };

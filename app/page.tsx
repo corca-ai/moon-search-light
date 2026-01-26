@@ -11,6 +11,7 @@ import { NoteSidebar } from './components/NoteSidebar';
 import { styles } from './components/styles';
 import { useSession } from './hooks/useSession';
 import { useSessionList } from './hooks/useSessionList';
+import { useResearchAssistant } from './hooks/useResearchAssistant';
 import type { PaperAnalysis, ChatMessage } from './types/session';
 
 export default function Home() {
@@ -25,11 +26,7 @@ export default function Home() {
   const [analyses, setAnalyses] = useState<Record<string, PaperAnalysis>>({});
   const [sortBy, setSortBy] = useState<'relevance' | 'recommended' | 'year-desc' | 'year-asc' | 'citations'>('recommended');
   const [modalImage, setModalImage] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
-  const [assistantActive, setAssistantActive] = useState(false);
-  const [analyzedPaperIds, setAnalyzedPaperIds] = useState<string[]>([]);
   const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
@@ -72,6 +69,25 @@ export default function Home() {
     rename: renameSessionInList,
   } = useSessionList();
 
+  // Research Assistant
+  const {
+    isActive: assistantActive,
+    isLoading: chatLoading,
+    chatMessages,
+    analyzedPapers,
+    activate: activateAssistant,
+    deactivate: deactivateAssistant,
+    sendMessage,
+    setChatMessages,
+    setIsActive: setAssistantActive,
+    setIsLoading: setChatLoading,
+    reset: resetAssistant,
+    restoreState: restoreAssistantState,
+  } = useResearchAssistant({
+    selectedPapers,
+    interestSummary,
+    onActiveChange: updateSessionAssistantActive,
+  });
 
   // Check localStorage for email on mount
   useEffect(() => {
@@ -95,8 +111,7 @@ export default function Home() {
       setAnalyses(state.analyses);
       setTranslations(state.translations);
       setInterestSummary(state.interestSummary);
-      setChatMessages(state.chatMessages);
-      setAssistantActive(state.assistantActive);
+      restoreAssistantState(state.assistantActive, state.chatMessages);
       // Restore search results
       const searchResults = state.searchResults || [];
       setAllPapers(searchResults);
@@ -118,7 +133,7 @@ export default function Home() {
       setCandidatePapers([]);
       setAllPapers([]);
       setDisplayCount(20);
-      setAnalyzedPaperIds([]);
+      resetAssistant();
       // Switch session (will trigger useEffect above)
       switchSession(loadedSession);
       refreshSessionList();
@@ -153,11 +168,9 @@ export default function Home() {
     setAllPapers([]);
     setAnalyses({});
     setTranslations({});
-    setChatMessages([]);
-    setAssistantActive(false);
     setInterestSummary('');
     setDisplayCount(20);
-    setAnalyzedPaperIds([]);
+    resetAssistant();
     refreshSessionList();
 
     posthog.capture('note_created', { note_name: result.session.name });
@@ -178,11 +191,9 @@ export default function Home() {
         setAllPapers([]);
         setAnalyses({});
         setTranslations({});
-        setChatMessages([]);
-        setAssistantActive(false);
         setInterestSummary('');
         setDisplayCount(20);
-        setAnalyzedPaperIds([]);
+        resetAssistant();
       }
       refreshSessionList();
     } else {
@@ -519,108 +530,6 @@ export default function Home() {
 
   const canActivateAssistant = selectedPapers.length >= 1;
 
-  const activateAssistant = async () => {
-    if (!canActivateAssistant) return;
-    setAssistantActive(true);
-    updateSessionAssistantActive(true);
-
-    // PostHog: Track Research Assistant activation
-    posthog.capture('research_assistant_activated', {
-      selected_papers_count: selectedPapers.length,
-      paper_ids: selectedPapers.map(p => p.paperId),
-      interest_summary: interestSummary,
-    });
-
-    // 이미 분석된 논문들과 동일한지 확인
-    const currentPaperIds = selectedPapers.map(p => p.paperId).sort().join(',');
-    const previousPaperIds = analyzedPaperIds.sort().join(',');
-
-    // 동일한 논문이면 기존 대화 유지
-    if (currentPaperIds === previousPaperIds && chatMessages.length > 0) {
-      return;
-    }
-
-    const paperList = selectedPapers.map((p, i) => `${i + 1}. ${p.title} (${p.year || '연도 미상'})`).join('\n');
-
-    // 논문 1개: 통합 분석 없이 바로 시작
-    if (selectedPapers.length === 1) {
-      setChatMessages([{
-        role: 'assistant',
-        content: `**선택된 논문:**\n${paperList}\n\n무엇을 도와드릴까요?\n\n💡 2개 이상의 논문을 선택하면 통합 분석을 제공합니다.`,
-      }]);
-      setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
-      return;
-    }
-
-    // 논문 2개 이상: 통합 분석 수행
-    setChatLoading(true);
-    setChatMessages([{
-      role: 'assistant',
-      content: `**선택된 논문 ${selectedPapers.length}개를 통합 분석 중입니다...**\n\n${paperList}`,
-    }]);
-
-    try {
-      const response = await fetch('/api/context-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ papers: selectedPapers }),
-      });
-
-      if (response.ok) {
-        const summary = await response.json();
-        const contextMessage = `## 📋 통합 컨텍스트 분석
-
-**선택된 논문:** ${selectedPapers.length}개
-${paperList}
-
----
-
-### 공통 문제
-${summary.commonProblem}
-
-### 공통 방법론
-${summary.commonMethods.map((m: string) => `- ${m}`).join('\n')}
-
-### 주요 차이점
-${summary.differences.map((d: string) => `- ${d}`).join('\n')}
-
-### 연구 지형
-${summary.researchLandscape}
-
----
-
-무엇을 도와드릴까요? 예시:
-- "후속 연구 아이디어를 제안해줘"
-- "Research Gap을 찾아줘"
-- "연구 계획서 초안을 작성해줘"`;
-
-        setChatMessages([{ role: 'assistant', content: contextMessage }]);
-        setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
-      } else {
-        setChatMessages([{
-          role: 'assistant',
-          content: `선택하신 ${selectedPapers.length}개의 논문을 분석할 준비가 되었습니다.\n\n${paperList}\n\n무엇을 도와드릴까요?`,
-        }]);
-        setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
-      }
-    } catch (err) {
-      console.error('Failed to generate context:', err);
-      setChatMessages([{
-        role: 'assistant',
-        content: `선택하신 ${selectedPapers.length}개의 논문을 분석할 준비가 되었습니다.\n\n${paperList}\n\n무엇을 도와드릴까요?`,
-      }]);
-      setAnalyzedPaperIds(selectedPapers.map(p => p.paperId));
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
-  const deactivateAssistant = () => {
-    setAssistantActive(false);
-    updateSessionAssistantActive(false);
-    // 대화 내용 유지 (재활성화 시 기억)
-  };
-
   const handleShowDetailPaper = (paper: Paper | null) => {
     setDetailPaper(paper);
     if (paper) {
@@ -633,14 +542,6 @@ ${summary.researchLandscape}
       });
     }
   };
-
-  useEffect(() => {
-    if (selectedPapers.length < 1 && assistantActive) {
-      deactivateAssistant();
-      setChatMessages([]);
-      setAnalyzedPaperIds([]);
-    }
-  }, [selectedPapers.length]);
 
   // 관심사 요약 업데이트 (디바운스)
   useEffect(() => {
@@ -811,58 +712,72 @@ ${summary.researchLandscape}
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
         <div className="max-w-6xl mx-auto px-6 py-6 h-screen overflow-y-auto">
-          {/* 헤더 */}
-          <div className="mb-6 pb-4 border-b border-slate-200/50 dark:border-slate-700/50 flex justify-end items-center">
-            <div className="flex items-center gap-3">
-              {assistantActive && chatMessages.length > 1 && (
-                <button onClick={downloadResearchOverview} className={styles.button.secondary}>
-                  <span className="flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    연구 개요 다운로드
-                  </span>
-                </button>
-              )}
-              {assistantActive ? (
-                <button onClick={deactivateAssistant} className={styles.button.secondary}>
-                  <span className="flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                    검색으로
-                  </span>
-                </button>
-              ) : (
-                canActivateAssistant && (
-                  <button onClick={activateAssistant} className={styles.button.primarySmall}>
-                    <span className="flex items-center gap-2">
-                      연구 시작
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
-                    </span>
-                  </button>
-                )
-              )}
+          {/* 헤더 (다운로드 버튼이 있을 때만 표시) */}
+          {assistantActive && chatMessages.length > 1 && (
+            <div className="mb-4 flex justify-end">
+              <button onClick={downloadResearchOverview} className={styles.button.secondary}>
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  연구 개요 다운로드
+                </span>
+              </button>
             </div>
-          </div>
+          )}
 
+          {/* 선택됨 영역 (공통) */}
+          <SelectedPapersSection
+            selectedPapers={selectedPapers}
+            excludedPapers={excludedPapers}
+            excludedExpanded={excludedExpanded}
+            onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
+            onMoveToCandidate={moveToCandidate}
+            onRestorePaper={restorePaper}
+            onShowDetail={handleShowDetailPaper}
+            interestSummary={interestSummary}
+          />
+
+          {/* 탭 패널 */}
+          <div className="mt-5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 shadow-sm">
+            {/* 탭 헤더 */}
+            <div className={styles.tab.container}>
+              <button
+                onClick={deactivateAssistant}
+                className={!assistantActive ? styles.tab.active : styles.tab.inactive}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  검색
+                </span>
+              </button>
+              <button
+                onClick={canActivateAssistant ? () => activateAssistant() : undefined}
+                className={
+                  !canActivateAssistant
+                    ? styles.tab.disabled
+                    : assistantActive
+                      ? styles.tab.active
+                      : styles.tab.inactive
+                }
+                disabled={!canActivateAssistant}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  연구
+                </span>
+              </button>
+            </div>
+
+            {/* 탭 컨텐츠 */}
+            <div className="p-5">
         {!assistantActive ? (
-          /* ===== Assistant 비활성: 상하 레이아웃 ===== */
+          /* ===== Assistant 비활성: 검색 영역 ===== */
           <div className="space-y-5">
-            {/* 상단: 선택됨 (수평 스크롤) */}
-            <SelectedPapersSection
-              selectedPapers={selectedPapers}
-              excludedPapers={excludedPapers}
-              excludedExpanded={excludedExpanded}
-              onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
-              onMoveToCandidate={moveToCandidate}
-              onRestorePaper={restorePaper}
-              onShowDetail={handleShowDetailPaper}
-              interestSummary={interestSummary}
-            />
-
             {/* 검색 영역 */}
             <div className="space-y-3">
               <form onSubmit={handleSearch} className="flex gap-3">
@@ -976,22 +891,10 @@ ${summary.researchLandscape}
             </div>
           </div>
         ) : (
-          /* ===== Assistant 활성: 상하 레이아웃 ===== */
+          /* ===== Assistant 활성: Research Assistant ===== */
           <div className="space-y-5">
-            {/* 상단: 선택됨 (수평 스크롤) */}
-            <SelectedPapersSection
-              selectedPapers={selectedPapers}
-              excludedPapers={excludedPapers}
-              excludedExpanded={excludedExpanded}
-              onToggleExcluded={() => setExcludedExpanded(!excludedExpanded)}
-              onMoveToCandidate={moveToCandidate}
-              onRestorePaper={restorePaper}
-              onShowDetail={handleShowDetailPaper}
-              interestSummary={interestSummary}
-            />
-
             {/* Research Assistant (전체 너비) */}
-            <div className={`${styles.card.withPaddingLarge} flex flex-col h-[calc(100vh-320px)]`}>
+            <div className="flex flex-col h-[calc(100vh-380px)]">
               <div className="flex justify-between items-center mb-4 shrink-0">
                 <div className="flex items-center gap-2">
                   <svg className={`w-5 h-5 ${styles.text.accent}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1051,6 +954,8 @@ ${summary.researchLandscape}
             </div>
           </div>
         )}
+            </div>
+          </div>
       </div>
 
       {/* Modal */}
