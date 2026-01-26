@@ -24,6 +24,16 @@ export function useSessionList() {
     setSessionList(getSessionList());
   }, []);
 
+  // Listen for session updates to refresh the list
+  useEffect(() => {
+    const handleSessionUpdated = () => {
+      setSessionList(getSessionList());
+    };
+
+    window.addEventListener('session-updated', handleSessionUpdated);
+    return () => window.removeEventListener('session-updated', handleSessionUpdated);
+  }, []);
+
   // Refresh list
   const refresh = useCallback(() => {
     setSessionList(getSessionList());

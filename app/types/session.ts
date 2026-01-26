@@ -36,12 +36,12 @@ export interface ChatMessage {
   timestamp?: number;
 }
 
-// Context Summary
+// Context Summary (통합 컨텍스트 분석)
 export interface ContextSummary {
-  connections: string;
-  themes: string;
-  gaps: string;
-  directions: string;
+  commonProblem: string;
+  commonMethods: string[];
+  differences: string[];
+  researchLandscape: string;
 }
 
 // Session State (current snapshot)

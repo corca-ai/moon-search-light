@@ -91,6 +91,8 @@ export function useSession() {
     debouncedSaveRef.current = debounce((s: Session) => {
       saveSession(s);
       updateSessionListItem(s);
+      // Notify session list to refresh
+      window.dispatchEvent(new CustomEvent('session-updated'));
     }, 1000);
   }
 
