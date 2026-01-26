@@ -43,6 +43,7 @@ export default function Home() {
   const [isLoadingContext, setIsLoadingContext] = useState(false);
   const [isContextExpanded, setIsContextExpanded] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showResearchOverview, setShowResearchOverview] = useState(false);
 
   // Email identification
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -712,13 +713,7 @@ export default function Home() {
     }
   };
 
-  const downloadResearchOverview = () => {
-    // PostHog: Track research overview download
-    posthog.capture('research_overview_downloaded', {
-      selected_papers_count: selectedPapers.length,
-      chat_messages_count: chatMessages.length,
-    });
-
+  const generateResearchOverviewMarkdown = () => {
     const now = new Date();
     const dateStr = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -773,7 +768,7 @@ export default function Home() {
     chatMessages.forEach((msg) => {
       if (msg.role === 'user') {
         markdown += `### 질문\n${msg.content}\n\n`;
-      } else {
+      } else if (msg.role === 'assistant') {
         markdown += `### AI 응답\n${msg.content}\n\n`;
       }
     });
@@ -781,11 +776,22 @@ export default function Home() {
     markdown += `---\n\n`;
     markdown += `*Moon Search Light에서 생성됨*\n`;
 
+    return markdown;
+  };
+
+  const downloadResearchOverview = () => {
+    // PostHog: Track research overview download
+    posthog.capture('research_overview_downloaded', {
+      selected_papers_count: selectedPapers.length,
+      chat_messages_count: chatMessages.length,
+    });
+
+    const markdown = generateResearchOverviewMarkdown();
     const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `research-overview-${now.getTime()}.md`;
+    a.download = `research-overview-${Date.now()}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -837,14 +843,14 @@ export default function Home() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {/* 다운로드 버튼 */}
+              {/* 연구 개요 보기 버튼 */}
               {assistantActive && chatMessages.length > 1 && (
-                <button onClick={downloadResearchOverview} className={styles.button.secondary}>
+                <button onClick={() => setShowResearchOverview(true)} className={styles.button.secondary}>
                   <span className="flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    연구 개요 다운로드
+                    연구 개요 보기
                   </span>
                 </button>
               )}
@@ -1192,6 +1198,41 @@ export default function Home() {
           onClose={() => setDetailPaper(null)}
           onTranslate={translateAbstract}
         />
+      )}
+
+      {/* Research Overview Modal */}
+      {showResearchOverview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className={`${styles.card.base} max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col`}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+              <h2 className={`text-lg font-semibold ${styles.text.primary}`}>연구 개요</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadResearchOverview}
+                  className={`${styles.button.primary} flex items-center gap-2`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  다운로드
+                </button>
+                <button
+                  onClick={() => setShowResearchOverview(false)}
+                  className={styles.button.iconSmall}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-5 prose prose-sm dark:prose-invert prose-slate max-w-none">
+              <ReactMarkdown>{generateResearchOverviewMarkdown()}</ReactMarkdown>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Email Modal */}
