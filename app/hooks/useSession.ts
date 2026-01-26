@@ -27,29 +27,72 @@ import {
 } from '../lib/session-list';
 import { MAX_SESSION_COUNT } from '../types/session';
 
-// Debounce helper
+// Update options for unified API
+export interface UpdateOptions {
+  recordActivity?: boolean;
+}
+
+// Debounced function interface with cancel/flush support
+interface DebouncedFunction<Args extends unknown[]> {
+  (...args: Args): void;
+  cancel: () => void;
+  flush: () => void;
+}
+
+// Debounce helper with cancel and flush methods
 function debounce<Args extends unknown[]>(
   fn: (...args: Args) => void,
   delay: number
-): (...args: Args) => void {
-  let timeoutId: NodeJS.Timeout;
-  return (...args: Args) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
+): DebouncedFunction<Args> {
+  let timeoutId: NodeJS.Timeout | null = null;
+  let pendingArgs: Args | null = null;
+
+  const debounced = (...args: Args) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    pendingArgs = args;
+    timeoutId = setTimeout(() => {
+      fn(...args);
+      pendingArgs = null;
+      timeoutId = null;
+    }, delay);
   };
+
+  debounced.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    pendingArgs = null;
+  };
+
+  debounced.flush = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    if (pendingArgs) {
+      fn(...pendingArgs);
+      pendingArgs = null;
+    }
+  };
+
+  return debounced;
 }
 
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Debounced save
-  const debouncedSaveRef = useRef(
-    debounce((s: Session) => {
+  // Debounced save with cancel/flush support
+  const debouncedSaveRef = useRef<DebouncedFunction<[Session]> | null>(null);
+
+  // Initialize debounced save function
+  if (!debouncedSaveRef.current) {
+    debouncedSaveRef.current = debounce((s: Session) => {
       saveSession(s);
       updateSessionListItem(s);
-    }, 1000)
-  );
+    }, 1000);
+  }
 
   // Initialize session on mount
   useEffect(() => {
@@ -73,9 +116,19 @@ export function useSession() {
     setIsLoading(false);
   }, []);
 
+  // Cleanup debounced save on unmount
+  useEffect(() => {
+    return () => {
+      // Flush pending saves on unmount
+      debouncedSaveRef.current?.flush();
+    };
+  }, []);
+
   // Save on beforeunload
   useEffect(() => {
     const handleBeforeUnload = () => {
+      // Flush pending debounced save first
+      debouncedSaveRef.current?.flush();
       if (session) {
         saveSession(session);
         updateSessionListItem(session);
@@ -92,7 +145,7 @@ export function useSession() {
       setSession((prev) => {
         if (!prev) return prev;
         const updated = addActivity(prev, type, data);
-        debouncedSaveRef.current(updated);
+        debouncedSaveRef.current?.(updated);
         return updated;
       });
     },
@@ -104,7 +157,7 @@ export function useSession() {
     setSession((prev) => {
       if (!prev) return prev;
       const updated = updateSessionState(prev, stateUpdates);
-      debouncedSaveRef.current(updated);
+      debouncedSaveRef.current?.(updated);
       return updated;
     });
   }, []);
@@ -157,7 +210,7 @@ export function useSession() {
         newName,
       });
       updated.name = newName;
-      debouncedSaveRef.current(updated);
+      debouncedSaveRef.current?.(updated);
       return updated;
     });
   }, []);
@@ -172,7 +225,7 @@ export function useSession() {
       setSession((prev) => {
         if (prev && prev.name === '새 연구' && !prev.state.query) {
           const updated = { ...prev, name: query.slice(0, 30) };
-          debouncedSaveRef.current(updated);
+          debouncedSaveRef.current?.(updated);
           return updated;
         }
         return prev;
@@ -181,12 +234,15 @@ export function useSession() {
     [updateWithActivity, updateState]
   );
 
-  // Update search results only (without activity)
+  // Update search results with optional activity recording
   const updateSearchResults = useCallback(
-    (searchResults: Paper[]) => {
+    (searchResults: Paper[], options?: UpdateOptions) => {
+      if (options?.recordActivity) {
+        updateWithActivity('search', { resultCount: searchResults.length });
+      }
       updateState({ searchResults });
     },
-    [updateState]
+    [updateState, updateWithActivity]
   );
 
   const recordPaperSelected = useCallback(

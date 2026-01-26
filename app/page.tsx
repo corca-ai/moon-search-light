@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import posthog from 'posthog-js';
 import type { Paper } from './api/search/route';
@@ -9,10 +9,10 @@ import { SearchResultCard } from './components/SearchResultCard';
 import { PaperDetailModal } from './components/PaperDetailModal';
 import { NoteSidebar } from './components/NoteSidebar';
 import { styles } from './components/styles';
-import { useSession } from './hooks/useSession';
-import { useSessionList } from './hooks/useSessionList';
+import { useSessionManager } from './hooks/useSessionManager';
 import { useResearchAssistant } from './hooks/useResearchAssistant';
 import type { PaperAnalysis, ChatMessage } from './types/session';
+import { SessionStorageError } from './lib/session-storage';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -40,12 +40,25 @@ export default function Home() {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailInput, setEmailInput] = useState('');
 
-  // Session management
+  // Error toast state
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+
+  // Error handler for session operations
+  const handleSessionError = useCallback((error: SessionStorageError) => {
+    setErrorToast(error.message);
+    setTimeout(() => setErrorToast(null), 5000);
+  }, []);
+
+  // Session management (unified hook)
   const {
     session,
     isLoading: isSessionLoading,
+    sessionList,
     createNewSession,
     renameSession,
+    deleteSession: deleteSessionById,
+    switchSession,
+    refreshSessionList,
     recordSearch,
     recordPaperSelected,
     recordPaperExcluded,
@@ -58,16 +71,10 @@ export default function Home() {
     updateAssistantActive: updateSessionAssistantActive,
     updateSortBy: updateSessionSortBy,
     updateSearchResults,
-    switchSession,
-  } = useSession();
-
-  const {
-    sessionList,
-    refresh: refreshSessionList,
-    load: loadSessionById,
-    remove: removeSession,
-    rename: renameSessionInList,
-  } = useSessionList();
+  } = useSessionManager({
+    onError: handleSessionError,
+    enableSync: true,
+  });
 
   // Research Assistant
   const {
@@ -127,20 +134,17 @@ export default function Home() {
 
   // Handle session switch
   const handleSessionSwitch = (id: string) => {
-    const loadedSession = loadSessionById(id);
-    if (loadedSession) {
+    const result = switchSession(id);
+    if (result.success) {
       // Clear current state
       setCandidatePapers([]);
       setAllPapers([]);
       setDisplayCount(20);
       resetAssistant();
-      // Switch session (will trigger useEffect above)
-      switchSession(loadedSession);
-      refreshSessionList();
 
       posthog.capture('note_switched', {
         note_id: id,
-        note_name: loadedSession.name,
+        note_name: result.session.name,
       });
     }
   };
@@ -151,7 +155,8 @@ export default function Home() {
 
     if (!result.success) {
       // Session limit reached
-      alert(`연구 노트는 최대 ${result.max}개까지 저장할 수 있습니다.\n기존 노트를 삭제한 후 다시 시도해주세요.`);
+      setErrorToast(`연구 노트는 최대 ${result.max}개까지 저장할 수 있습니다. 기존 노트를 삭제한 후 다시 시도해주세요.`);
+      setTimeout(() => setErrorToast(null), 5000);
       posthog.capture('note_creation_blocked', {
         reason: 'limit_reached',
         current_count: result.current,
@@ -171,45 +176,35 @@ export default function Home() {
     setInterestSummary('');
     setDisplayCount(20);
     resetAssistant();
-    refreshSessionList();
 
     posthog.capture('note_created', { note_name: result.session.name });
   };
 
   // Handle delete session
   const handleDeleteSession = (id: string) => {
-    if (session?.id === id) {
-      // Cannot delete current session, delete first then create new
-      removeSession(id);
-      const result = createNewSession('새 연구');
-      if (result.success) {
-        // Clear state for new session
-        setQuery('');
-        setSelectedPapers([]);
-        setCandidatePapers([]);
-        setExcludedPapers([]);
-        setAllPapers([]);
-        setAnalyses({});
-        setTranslations({});
-        setInterestSummary('');
-        setDisplayCount(20);
-        resetAssistant();
-      }
-      refreshSessionList();
-    } else {
-      removeSession(id);
-      refreshSessionList();
+    const isCurrentSession = session?.id === id;
+    const result = deleteSessionById(id);
+
+    if (result.success && isCurrentSession && result.newSession) {
+      // Clear state for new session
+      setQuery('');
+      setSelectedPapers([]);
+      setCandidatePapers([]);
+      setExcludedPapers([]);
+      setAllPapers([]);
+      setAnalyses({});
+      setTranslations({});
+      setInterestSummary('');
+      setDisplayCount(20);
+      resetAssistant();
     }
+
     posthog.capture('note_deleted', { note_id: id });
   };
 
   // Handle rename session
   const handleRenameSession = (id: string, newName: string) => {
-    renameSessionInList(id, newName);
-    if (session?.id === id) {
-      renameSession(newName);
-    }
-    refreshSessionList();
+    renameSession(id, newName);
     posthog.capture('note_renamed', { note_id: id, new_name: newName });
   };
 
@@ -1004,6 +999,26 @@ export default function Home() {
               className={`${styles.button.primary} w-full disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               시작하기
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Error Toast */}
+      {errorToast && (
+        <div className="fixed bottom-4 right-4 z-50 animate-fade-in">
+          <div className="flex items-center gap-3 px-4 py-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg shadow-lg">
+            <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-sm text-red-700 dark:text-red-300">{errorToast}</span>
+            <button
+              onClick={() => setErrorToast(null)}
+              className="ml-2 text-red-500 hover:text-red-700 dark:hover:text-red-300"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         </div>
