@@ -14,6 +14,7 @@ Moon Search Light는 연구자들이 학술 논문을 효율적으로 검색하�
 - **AI 요약**: GPT-4o-mini를 활용한 구조화된 한국어 논문 요약 (개요, 목표, 방법론, 결과)
 - **초록 번역**: 영문 초록을 한국어로 번역
 - **관심 주제 요약**: 선택/제외한 논문을 기반으로 연구 관심사 자동 분석
+- **관계성 점수**: 선택된 논문들과 후보 논문 간 벡터 유사도 기반 관련성 표시
 - **Research Assistant**: AI 대화를 통한 후속 연구 아이디어 도출 (마크다운 지원)
 - **통합 컨텍스트 분석**: 2개 이상 논문 선택 시 공통점, 차이점, 연구 지형 자동 분석
 - **시각적 프리뷰**: ArXiv 논문 스냅샷 이미지 제공
@@ -69,7 +70,7 @@ npm run dev
 |------|------|
 | Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
 | UI | Pretendard 폰트, @tailwindcss/typography |
-| AI | OpenAI GPT-4o-mini |
+| AI | OpenAI GPT-4o-mini, text-embedding-3-small |
 | 검색 | Semantic Scholar API |
 | 이미지 | Moonlight API |
 

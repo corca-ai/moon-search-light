@@ -11,6 +11,7 @@ import { NoteSidebar } from './components/NoteSidebar';
 import { styles } from './components/styles';
 import { useSessionManager } from './hooks/useSessionManager';
 import { useResearchAssistant } from './hooks/useResearchAssistant';
+import { useRelevanceScore } from './hooks/useRelevanceScore';
 import type { PaperAnalysis, ChatMessage } from './types/session';
 import { SessionStorageError } from './lib/session-storage';
 
@@ -94,6 +95,12 @@ export default function Home() {
     selectedPapers,
     interestSummary,
     onActiveChange: updateSessionAssistantActive,
+  });
+
+  // Relevance score calculation (vector similarity)
+  const { relevanceScores, isCalculating: isCalculatingRelevance } = useRelevanceScore({
+    selectedPapers,
+    candidatePapers,
   });
 
   // Check localStorage for email on mount
@@ -855,6 +862,7 @@ export default function Home() {
                   analysis={analyses[paper.paperId]}
                   translation={translations[paper.paperId]}
                   isTranslating={translatingIds.has(paper.paperId)}
+                  relevanceScore={relevanceScores[paper.paperId]}
                   onSelect={moveToSelected}
                   onExclude={excludePaper}
                   onImageClick={(url) => setModalImage(url)}

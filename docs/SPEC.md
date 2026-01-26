@@ -14,6 +14,7 @@
 - **스마트 정렬**: 최신 연구 우선 + 인용수 반영
 - **AI 요약**: 구조화된 한국어 논문 요약
 - **관심 주제 분석**: 선택/제외 패턴 기반 자동 분석
+- **관계성 점수**: 벡터 유사도 기반 논문 관련성 표시
 - **Research Assistant**: AI 대화를 통한 후속 연구 아이디어 도출
 - **시각적 프리뷰**: ArXiv 논문 스냅샷 이미지
 
@@ -81,6 +82,12 @@
 ### 초록 번역
 - GPT로 한국어 번역
 
+### 관계성 점수
+- 선택된 논문들과 후보 논문 간 벡터 유사도 측정
+- 제목 + 초록 텍스트를 임베딩하여 코사인 유사도 계산
+- 선택된 논문들의 평균 임베딩과 비교
+- 0-100% 스케일로 관련성 표시
+
 ---
 
 ## 6. Research Assistant
@@ -116,7 +123,7 @@
 | 영역 | 기술 |
 |------|------|
 | Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| AI | OpenAI GPT-4o-mini |
+| AI | OpenAI GPT-4o-mini, text-embedding-3-small |
 | 검색 | Semantic Scholar API |
 | Analytics | PostHog |
 
