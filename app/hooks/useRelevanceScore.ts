@@ -103,8 +103,9 @@ export function useRelevanceScore({
       // Fetch embeddings for selected papers
       const selectedEmbeddings = await fetchEmbeddings(selectedPapers, signal);
 
-      // Fetch embeddings for candidate papers (in batches)
-      const candidateEmbeddings = await fetchEmbeddings(candidatePapers, signal);
+      // Fetch embeddings for candidate papers (최대 20개로 제한하여 API 비용 절감)
+      const limitedCandidates = candidatePapers.slice(0, 20);
+      const candidateEmbeddings = await fetchEmbeddings(limitedCandidates, signal);
 
       if (signal.aborted) return;
 

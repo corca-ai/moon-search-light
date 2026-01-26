@@ -29,6 +29,8 @@ export default function Home() {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
+  const [failedSummarizeIds, setFailedSummarizeIds] = useState<Set<string>>(new Set());
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
@@ -141,6 +143,8 @@ export default function Home() {
       setCandidatePapers(candidates.slice(0, 20));
       setDisplayCount(20);
       refreshSessionList();
+      // 세션 복원 완료
+      setTimeout(() => setIsRestoringSession(false), 100);
     }
   }, [session?.id, isSessionLoading]);
 
@@ -451,8 +455,8 @@ export default function Home() {
   const fetchAnalysis = async (paper: Paper) => {
     if (!paper.abstract || analyses[paper.paperId]) return;
 
-    // 이미 요약 중인 논문은 건너뛰기
-    if (summarizingIds.has(paper.paperId)) return;
+    // 이미 요약 중이거나 실패한 논문은 건너뛰기
+    if (summarizingIds.has(paper.paperId) || failedSummarizeIds.has(paper.paperId)) return;
 
     setSummarizingIds(prev => new Set(prev).add(paper.paperId));
 
@@ -472,9 +476,14 @@ export default function Home() {
           recordAnalysisDone(paper.paperId, analysis, newAnalyses);
           return newAnalyses;
         });
+      } else {
+        // API 오류 시 실패 목록에 추가
+        setFailedSummarizeIds(prev => new Set(prev).add(paper.paperId));
       }
     } catch (err) {
       console.error('Failed to fetch analysis:', err);
+      // 네트워크 오류 시 실패 목록에 추가
+      setFailedSummarizeIds(prev => new Set(prev).add(paper.paperId));
     } finally {
       setSummarizingIds(prev => {
         const next = new Set(prev);
@@ -534,32 +543,30 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // 요약 중인 논문이 있으면 대기
-    if (summarizingIds.size > 0) return;
+    // 세션 복원 중이거나 요약 중인 논문이 있으면 대기
+    if (isRestoringSession || summarizingIds.size > 0) return;
+
+    // 실패한 논문은 제외하는 필터 함수
+    const canSummarize = (p: Paper) =>
+      p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId) && !failedSummarizeIds.has(p.paperId);
 
     if (assistantActive) {
       // Assistant 활성 시: 선택된 논문만 요약
-      const unsummarizedSelected = selectedPapers.filter(
-        p => p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId)
-      );
+      const unsummarizedSelected = selectedPapers.filter(canSummarize);
       if (unsummarizedSelected.length > 0) {
         processPapersInBatches(unsummarizedSelected);
       }
     } else {
-      // Assistant 비활성 시: 선택된 논문 전체 + 정렬 기준으로 상위 5개
-      const unsummarizedSelected = selectedPapers.filter(
-        p => p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId)
-      );
+      // Assistant 비활성 시: 선택된 논문 전체 + 정렬 기준으로 상위 3개
+      const unsummarizedSelected = selectedPapers.filter(canSummarize);
       const sortedCandidates = sortPapers(candidatePapers, sortBy);
-      const unsummarizedCandidates = sortedCandidates.filter(
-        p => p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId)
-      );
+      const unsummarizedCandidates = sortedCandidates.filter(canSummarize);
       const papersToSummarize = [...unsummarizedSelected, ...unsummarizedCandidates.slice(0, 3)];
       if (papersToSummarize.length > 0) {
         processPapersInBatches(papersToSummarize);
       }
     }
-  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds]);
+  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds, isRestoringSession, failedSummarizeIds]);
 
   const handleShowDetailPaper = (paper: Paper | null) => {
     setDetailPaper(paper);
@@ -576,6 +583,9 @@ export default function Home() {
 
   // 관심사 요약 업데이트 (디바운스)
   useEffect(() => {
+    // 세션 복원 중에는 API 호출 스킵 (이미 저장된 값 사용)
+    if (isRestoringSession) return;
+
     if (selectedPapers.length === 0) {
       setInterestSummary('');
       return;
@@ -602,7 +612,7 @@ export default function Home() {
     }, 500); // 500ms 디바운스
 
     return () => clearTimeout(timer);
-  }, [selectedPapers, excludedPapers]);
+  }, [selectedPapers, excludedPapers, isRestoringSession]);
 
   // 통합 컨텍스트 분석
   const loadContextSummary = async () => {
