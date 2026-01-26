@@ -363,7 +363,7 @@ export default function Home() {
     const newExcluded = [...excludedPapers, paper];
     setExcludedPapers(newExcluded);
     setCandidatePapers(candidatePapers.filter(p => p.paperId !== paper.paperId));
-    addSystemMessage(`제외: ${paper.title.slice(0, 40)}...`);
+    addSystemMessage(`검토 완료: ${paper.title.slice(0, 40)}...`);
 
     // Record activity
     recordPaperExcluded(paper, newExcluded);
@@ -381,7 +381,7 @@ export default function Home() {
     const newExcluded = excludedPapers.filter(p => p.paperId !== paper.paperId);
     setCandidatePapers(newCandidates);
     setExcludedPapers(newExcluded);
-    addSystemMessage(`복원: ${paper.title.slice(0, 40)}...`);
+    addSystemMessage(`다시 검토: ${paper.title.slice(0, 40)}...`);
 
     // Record activity
     recordPaperRestored(paper, selectedPapers, newExcluded);

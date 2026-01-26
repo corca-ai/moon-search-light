@@ -74,11 +74,11 @@ export function SearchResultCard({
             </button>
             <button
               onClick={() => onExclude(paper)}
-              className={`${styles.button.iconSmall} hover:text-red-500 dark:hover:text-red-400`}
-              title="제외"
+              className={`${styles.button.iconSmall} hover:text-green-500 dark:hover:text-green-400`}
+              title="검토 완료"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
               </svg>
             </button>
           </div>

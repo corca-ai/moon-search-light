@@ -68,7 +68,7 @@ export function SelectedPapersSection({
             <svg className={`w-3 h-3 transition-transform ${excludedExpanded ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
             </svg>
-            제외됨 {excludedPapers.length}개
+            검토 완료 {excludedPapers.length}개
           </button>
           {excludedExpanded && (
             <div className="flex gap-3 overflow-x-auto pb-2 mt-3 scrollbar-thin">
