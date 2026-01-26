@@ -90,19 +90,16 @@ export function SearchResultCard({
           {relevanceScore !== undefined && relevanceScore > 0 && (
             <>
               <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                   relevanceScore >= 70
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                     : relevanceScore >= 50
                     ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                     : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
                 }`}
-                title="선택된 논문들과의 유사도"
+                title="선택한 논문과의 관련도"
               >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-                {relevanceScore}%
+                관심 주제와 {relevanceScore}% 유사
               </span>
               <span className="text-slate-300 dark:text-slate-600">•</span>
             </>
