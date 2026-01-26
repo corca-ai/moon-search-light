@@ -39,6 +39,7 @@ export default function Home() {
   const [editingTitleValue, setEditingTitleValue] = useState('');
   const [contextSummary, setContextSummary] = useState<ContextSummary | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [isContextExpanded, setIsContextExpanded] = useState(true);
 
   // Email identification
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export default function Home() {
     recordChatUser,
     recordChatAssistant,
     updateInterestSummary: updateSessionInterestSummary,
+    updateContextSummary,
     updateAssistantActive: updateSessionAssistantActive,
     updateSortBy: updateSessionSortBy,
     updateSearchResults,
@@ -86,12 +88,9 @@ export default function Home() {
     isActive: assistantActive,
     isLoading: chatLoading,
     chatMessages,
-    analyzedPapers,
     activate: activateAssistant,
     deactivate: deactivateAssistant,
-    sendMessage,
     setChatMessages,
-    setIsActive: setAssistantActive,
     setIsLoading: setChatLoading,
     reset: resetAssistant,
     restoreState: restoreAssistantState,
@@ -659,7 +658,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           messages: [...chatMessages, userMessage],
-          context: { papers: selectedPapers, analyses },
+          context: { papers: selectedPapers, analyses, contextSummary },
         }),
       });
 
@@ -732,6 +731,32 @@ export default function Home() {
     });
 
     markdown += `---\n\n`;
+
+    // 통합 컨텍스트 분석
+    if (contextSummary) {
+      markdown += `## 통합 컨텍스트 분석\n\n`;
+      markdown += `### 공통 문제\n${contextSummary.commonProblem}\n\n`;
+      markdown += `### 공통 방법론\n`;
+      if (contextSummary.commonMethods?.length > 0) {
+        contextSummary.commonMethods.forEach((m) => {
+          markdown += `- ${m}\n`;
+        });
+      } else {
+        markdown += `없음\n`;
+      }
+      markdown += `\n`;
+      markdown += `### 주요 차이점\n`;
+      if (contextSummary.differences?.length > 0) {
+        contextSummary.differences.forEach((d) => {
+          markdown += `- ${d}\n`;
+        });
+      } else {
+        markdown += `없음\n`;
+      }
+      markdown += `\n`;
+      markdown += `### 연구 지형\n${contextSummary.researchLandscape}\n\n`;
+      markdown += `---\n\n`;
+    }
 
     // 대화 내용
     markdown += `## 연구 논의 내용\n\n`;
@@ -970,9 +995,25 @@ export default function Home() {
             </div>
 
           {/* Context Summary */}
-          <div className="p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <span className={`text-sm font-medium ${styles.text.secondary}`}>통합 컨텍스트 분석</span>
+          <div className="border-b border-slate-200 dark:border-slate-700 shrink-0">
+            <div className="p-4 flex items-center justify-between">
+              <button
+                onClick={() => setIsContextExpanded(!isContextExpanded)}
+                className={`flex items-center gap-2 text-sm font-medium ${styles.text.secondary} hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors`}
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform ${isContextExpanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                통합 컨텍스트 분석
+                {contextSummary && (
+                  <span className="w-2 h-2 bg-green-500 rounded-full" title="분석 완료" />
+                )}
+              </button>
               <button
                 onClick={loadContextSummary}
                 disabled={isLoadingContext || selectedPapers.length < 2}
@@ -990,39 +1031,43 @@ export default function Home() {
               </button>
             </div>
 
-            {contextSummary ? (
-              <div className={`text-xs space-y-2 ${styles.text.secondary}`}>
-                <div>
-                  <span className="font-medium text-indigo-600 dark:text-indigo-400">공통 문제:</span>
-                  <p className="mt-0.5 leading-relaxed">{contextSummary.commonProblem}</p>
-                </div>
-                <div>
-                  <span className="font-medium text-indigo-600 dark:text-indigo-400">공통 방법론:</span>
-                  <ul className="mt-0.5 list-disc list-inside space-y-0.5">
-                    {contextSummary.commonMethods.map((method, i) => (
-                      <li key={i}>{method}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <span className="font-medium text-indigo-600 dark:text-indigo-400">주요 차이점:</span>
-                  <ul className="mt-0.5 list-disc list-inside space-y-0.5">
-                    {contextSummary.differences.map((diff, i) => (
-                      <li key={i}>{diff}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <span className="font-medium text-indigo-600 dark:text-indigo-400">연구 지형:</span>
-                  <p className="mt-0.5 leading-relaxed">{contextSummary.researchLandscape}</p>
-                </div>
+            {isContextExpanded && (
+              <div className="px-4 pb-4">
+                {contextSummary ? (
+                  <div className={`text-xs space-y-2 ${styles.text.secondary}`}>
+                    <div>
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400">공통 문제:</span>
+                      <p className="mt-0.5 leading-relaxed">{contextSummary.commonProblem}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400">공통 방법론:</span>
+                      <ul className="mt-0.5 list-disc list-inside space-y-0.5">
+                        {contextSummary.commonMethods.map((method, i) => (
+                          <li key={i}>{method}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400">주요 차이점:</span>
+                      <ul className="mt-0.5 list-disc list-inside space-y-0.5">
+                        {contextSummary.differences.map((diff, i) => (
+                          <li key={i}>{diff}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="font-medium text-indigo-600 dark:text-indigo-400">연구 지형:</span>
+                      <p className="mt-0.5 leading-relaxed">{contextSummary.researchLandscape}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className={`text-xs ${styles.text.muted}`}>
+                    {selectedPapers.length < 2
+                      ? '논문을 2개 이상 선택하고 분석 버튼을 클릭하세요'
+                      : '분석 버튼을 클릭하여 선택된 논문들의 컨텍스트를 분석하세요'}
+                  </p>
+                )}
               </div>
-            ) : (
-              <p className={`text-xs ${styles.text.muted}`}>
-                {selectedPapers.length < 2
-                  ? '논문을 2개 이상 선택하고 분석 버튼을 클릭하세요'
-                  : '분석 버튼을 클릭하여 선택된 논문들의 컨텍스트를 분석하세요'}
-              </p>
             )}
           </div>
 

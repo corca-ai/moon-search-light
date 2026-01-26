@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   try {
     const { messages, context } = await request.json();
 
-    const { papers, analyses } = context || {};
+    const { papers, analyses, contextSummary } = context || {};
 
     // PostHog: Track chat API call
     const posthog = getPostHogClient();
@@ -54,6 +54,24 @@ export async function POST(request: NextRequest) {
           systemPrompt += `\n- 결과: ${analysis.results}`;
         }
       });
+    }
+
+    // Add context summary if available
+    if (contextSummary) {
+      systemPrompt += `
+
+## 통합 컨텍스트 분석
+### 공통 문제
+${contextSummary.commonProblem}
+
+### 공통 방법론
+${contextSummary.commonMethods?.map((m: string) => `- ${m}`).join('\n') || '없음'}
+
+### 주요 차이점
+${contextSummary.differences?.map((d: string) => `- ${d}`).join('\n') || '없음'}
+
+### 연구 지형
+${contextSummary.researchLandscape}`;
     }
 
     systemPrompt += `
