@@ -598,7 +598,6 @@ export default function Home() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             selectedTitles: selectedPapers.map(p => p.title),
-            excludedTitles: excludedPapers.map(p => p.title),
           }),
         });
         if (response.ok) {
@@ -612,7 +611,7 @@ export default function Home() {
     }, 500); // 500ms 디바운스
 
     return () => clearTimeout(timer);
-  }, [selectedPapers, excludedPapers, isRestoringSession]);
+  }, [selectedPapers, isRestoringSession]);
 
   // 통합 컨텍스트 분석
   const loadContextSummary = async () => {

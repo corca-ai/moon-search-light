@@ -7,7 +7,7 @@ const openai = new OpenAI({
 
 export async function POST(request: NextRequest) {
   try {
-    const { selectedTitles, excludedTitles } = await request.json();
+    const { selectedTitles } = await request.json();
 
     if (selectedTitles.length === 0) {
       return NextResponse.json({ summary: '' });
