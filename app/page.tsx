@@ -971,7 +971,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Right Sidebar - Research Assistant */}
+      {/* Right Sidebar - Research Assistant (선택된 논문이 있을 때만 표시) */}
+      {selectedPapers.length > 0 && (
       <div className={`${assistantActive ? 'w-[560px]' : 'w-14'} border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex flex-col h-screen transition-all duration-300`}>
         {assistantActive ? (
           <>
@@ -1158,6 +1159,7 @@ export default function Home() {
           </button>
         )}
       </div>
+      )}
 
       {/* Modal */}
       {/* Image Modal */}
