@@ -53,4 +53,3 @@ Moon Search Light는 연구자들이 학술 논문을 효율적으로 검색하�
 ## 문서
 
 - [docs/SPEC.md](docs/SPEC.md) - 상세 기능 명세
-- [docs/POSTHOG.md](docs/POSTHOG.md) - PostHog 분석 통합 설정
