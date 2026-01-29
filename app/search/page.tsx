@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import posthog from 'posthog-js';
@@ -16,7 +16,7 @@ import { useRelevanceScore } from '../hooks/useRelevanceScore';
 import type { PaperAnalysis, ChatMessage, ContextSummary } from '../types/session';
 import { SessionStorageError } from '../lib/session-storage';
 
-export default function Home() {
+function SearchContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState('');
   const initialSearchDone = useRef(false);
@@ -1354,5 +1354,13 @@ export default function Home() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center"><div className="text-slate-500">로딩 중...</div></div>}>
+      <SearchContent />
+    </Suspense>
   );
 }
