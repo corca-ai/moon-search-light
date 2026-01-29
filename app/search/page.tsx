@@ -4,17 +4,17 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import posthog from 'posthog-js';
-import type { Paper } from './api/search/route';
-import { SelectedPapersSection } from './components/SelectedPapersSection';
-import { SearchResultCard } from './components/SearchResultCard';
-import { PaperDetailModal } from './components/PaperDetailModal';
-import { NoteSidebar } from './components/NoteSidebar';
-import { styles } from './components/styles';
-import { useSessionManager } from './hooks/useSessionManager';
-import { useResearchAssistant } from './hooks/useResearchAssistant';
-import { useRelevanceScore } from './hooks/useRelevanceScore';
-import type { PaperAnalysis, ChatMessage, ContextSummary } from './types/session';
-import { SessionStorageError } from './lib/session-storage';
+import type { Paper } from '../api/search/route';
+import { SelectedPapersSection } from '../components/SelectedPapersSection';
+import { SearchResultCard } from '../components/SearchResultCard';
+import { PaperDetailModal } from '../components/PaperDetailModal';
+import { NoteSidebar } from '../components/NoteSidebar';
+import { styles } from '../components/styles';
+import { useSessionManager } from '../hooks/useSessionManager';
+import { useResearchAssistant } from '../hooks/useResearchAssistant';
+import { useRelevanceScore } from '../hooks/useRelevanceScore';
+import type { PaperAnalysis, ChatMessage, ContextSummary } from '../types/session';
+import { SessionStorageError } from '../lib/session-storage';
 
 export default function Home() {
   const searchParams = useSearchParams();
