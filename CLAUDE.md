@@ -36,3 +36,38 @@
 - `app/hooks/` - 커스텀 훅
 - `app/lib/` - 유틸리티
 - `app/types/` - 타입 정의
+- `app/features/` - 비즈니스 기능 모듈
+
+## 기능 모듈 ↔ 컨텍스트 문서 동기화
+
+**핵심 규칙: 코드 변경 시 문서 업데이트, 문서 변경 시 코드 업데이트**
+
+| 기능 모듈 | 컨텍스트 문서 |
+|-----------|---------------|
+| `app/features/notes/` | `contexts/notes-*.md` |
+| `app/features/ai-analysis/` | `contexts/ai-analysis-*.md` |
+| `app/features/relevance/` | `contexts/relevance-*.md` |
+| `app/features/search/` | `contexts/search-*.md` |
+| `app/features/research-assistant/` | `contexts/research-assistant-*.md` |
+
+### 동기화 흐름
+
+```
+코드 변경 → 해당 컨텍스트 문서 확인 → 문서 업데이트
+문서 변경 → 해당 기능 모듈 확인 → 코드 업데이트
+```
+
+### 파일 매핑
+
+| 코드 | 문서 | 동기화 대상 |
+|------|------|-------------|
+| `principles.ts` | `*-principles.md` | 상수, 규칙, 제한값 |
+| `strategies.ts` | `*-strategy.md` | 알고리즘, 처리 흐름 |
+| `types.ts` | `*-format.md` | 타입, 인터페이스 |
+
+### 작업 시 체크리스트
+
+- [ ] 기능 모듈 수정 시: 해당 `contexts/*.md` 문서 읽고 업데이트
+- [ ] 컨텍스트 문서 수정 시: 해당 `app/features/*/` 코드 읽고 업데이트
+- [ ] 새 상수/타입 추가 시: 코드와 문서 양쪽에 반영
+- [ ] 알고리즘 변경 시: strategy 문서의 흐름도 업데이트
