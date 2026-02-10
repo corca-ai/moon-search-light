@@ -42,6 +42,7 @@ function SearchContent() {
   const [chatInput, setChatInput] = useState('');
   const summarizingIdsRef = useRef<Set<string>>(new Set());
   const failedSummarizeIdsRef = useRef<Set<string>>(new Set());
+  const summarizeAbortRef = useRef<AbortController | null>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
@@ -154,7 +155,63 @@ function SearchContent() {
     setDisplayCount(20);
     summarizingIdsRef.current = new Set();
     failedSummarizeIdsRef.current = new Set();
+    summarizeAbortRef.current?.abort();
+    summarizeAbortRef.current = null;
+    // 세션 복원 직후 명시적으로 summarize 시작
+    runSummarize([...state.selectedPapers, ...candidates.slice(0, 20)], state.analyses);
   };
+
+  const runSummarize = useCallback((papers: Paper[], currentAnalyses: Record<string, PaperAnalysis>) => {
+    const needs = papers.filter(p =>
+      p.abstract &&
+      !currentAnalyses[p.paperId] &&
+      !summarizingIdsRef.current.has(p.paperId) &&
+      !failedSummarizeIdsRef.current.has(p.paperId)
+    );
+    if (needs.length === 0) return;
+
+    if (!summarizeAbortRef.current || summarizeAbortRef.current.signal.aborted) {
+      summarizeAbortRef.current = new AbortController();
+    }
+    const signal = summarizeAbortRef.current.signal;
+    const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
+
+    needs.slice(0, 3).forEach(paper => {
+      summarizingIdsRef.current.add(paper.paperId);
+
+      fetch('/api/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(email ? { 'x-user-email': email } : {}),
+        },
+        body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
+        signal,
+      })
+        .then(res => {
+          if (signal.aborted) return null;
+          if (!res.ok) throw new Error('API error');
+          return res.json();
+        })
+        .then(analysis => {
+          if (!analysis || signal.aborted) return;
+          setAnalyses(prev => {
+            const next = { ...prev, [paper.paperId]: analysis };
+            recordAnalysisDone(paper.paperId, analysis, next);
+            return next;
+          });
+        })
+        .catch(err => {
+          if (!signal.aborted) {
+            console.error('Failed to summarize:', err);
+            failedSummarizeIdsRef.current.add(paper.paperId);
+          }
+        })
+        .finally(() => {
+          summarizingIdsRef.current.delete(paper.paperId);
+        });
+    });
+  }, [recordAnalysisDone]);
 
   // Shared search execution - single source of truth for all search paths
   const executeSearch = useCallback(async (searchQuery: string, source: 'form' | 'url' = 'form') => {
@@ -178,6 +235,8 @@ function SearchContent() {
     });
     summarizingIdsRef.current = new Set();
     failedSummarizeIdsRef.current = new Set();
+    summarizeAbortRef.current?.abort();
+    summarizeAbortRef.current = null;
     setDisplayCount(20);
 
     try {
@@ -221,6 +280,9 @@ function SearchContent() {
       }
       recordSearch(searchQuery, papers.length, papers);
 
+      // 검색 완료 직후 명시적으로 summarize 시작 (새 검색이므로 analyses 비어있음)
+      runSummarize(papers.slice(0, 20), {});
+
       posthog.capture('paper_searched', {
         query: searchQuery,
         results_count: papers.length,
@@ -237,7 +299,7 @@ function SearchContent() {
     } finally {
       if (!signal.aborted) setLoading(false);
     }
-  }, [recordSearch]);
+  }, [recordSearch, runSummarize]);
 
   // Single initialization: pending query check → session restore → ready
   useEffect(() => {
@@ -524,8 +586,6 @@ function SearchContent() {
     }
   };
 
-  // No separate fetchAnalysis/processPapersInBatches — summarize logic lives in the effect below
-
   const translateAbstract = async (paperId: string, abstract: string) => {
     if (translations[paperId] || translatingIds.has(paperId)) return;
 
@@ -562,65 +622,14 @@ function SearchContent() {
     }
   };
 
+  // 후속 배치: analyses 변경 시 아직 분석 안 된 papers 처리
   useEffect(() => {
     if (!isReady) return;
-
     const displayed = assistantActive
       ? selectedPapers
       : [...selectedPapers, ...sortPapers(candidatePapers, sortBy)];
-
-    const needs = displayed.filter(p =>
-      p.abstract &&
-      !analyses[p.paperId] &&
-      !summarizingIdsRef.current.has(p.paperId) &&
-      !failedSummarizeIdsRef.current.has(p.paperId)
-    );
-
-    if (needs.length === 0) return;
-
-    if (!searchAbortRef.current) {
-      searchAbortRef.current = new AbortController();
-    }
-    const signal = searchAbortRef.current.signal;
-    const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
-    const batch = needs.slice(0, 3);
-
-    batch.forEach(paper => {
-      summarizingIdsRef.current.add(paper.paperId);
-
-      fetch('/api/summarize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(email ? { 'x-user-email': email } : {}),
-        },
-        body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
-        signal,
-      })
-        .then(res => {
-          if (signal.aborted) return null;
-          if (!res.ok) throw new Error('API error');
-          return res.json();
-        })
-        .then(analysis => {
-          if (!analysis || signal.aborted) return;
-          setAnalyses(prev => {
-            const next = { ...prev, [paper.paperId]: analysis };
-            recordAnalysisDone(paper.paperId, analysis, next);
-            return next;
-          });
-        })
-        .catch(err => {
-          if (!signal.aborted) {
-            console.error('Failed to summarize:', err);
-            failedSummarizeIdsRef.current.add(paper.paperId);
-          }
-        })
-        .finally(() => {
-          summarizingIdsRef.current.delete(paper.paperId);
-        });
-    });
-  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, isReady]);
+    runSummarize(displayed, analyses);
+  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, isReady, runSummarize]);
 
   const handleShowDetailPaper = (paper: Paper | null) => {
     setDetailPaper(paper);
