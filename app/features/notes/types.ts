@@ -23,6 +23,7 @@ export interface PaperAnalysis {
   method: string;
   results: string;
   keywords: string[];
+  failed?: boolean;
 }
 
 /**

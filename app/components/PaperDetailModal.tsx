@@ -9,6 +9,7 @@ interface PaperAnalysis {
   method: string;
   results: string;
   keywords: string[];
+  failed?: boolean;
 }
 
 interface PaperDetailModalProps {
@@ -108,7 +109,7 @@ export function PaperDetailModal({
           )}
 
           {/* AI 분석 결과 */}
-          {analysis ? (
+          {analysis && !analysis.failed ? (
             <div className={`space-y-4 pt-4 border-t ${styles.divider}`}>
               <h3 className={`text-sm font-semibold ${styles.text.secondary} flex items-center gap-2`}>
                 <svg className={`w-4 h-4 ${styles.text.accent}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

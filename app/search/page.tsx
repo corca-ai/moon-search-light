@@ -41,7 +41,6 @@ function SearchContent() {
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
   const summarizingIdsRef = useRef<Set<string>>(new Set());
-  const failedSummarizeIdsRef = useRef<Set<string>>(new Set());
   const summarizeAbortRef = useRef<AbortController | null>(null);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
@@ -154,7 +153,7 @@ function SearchContent() {
     setCandidatePapers(candidates.slice(0, 20));
     setDisplayCount(20);
     summarizingIdsRef.current = new Set();
-    failedSummarizeIdsRef.current = new Set();
+
     summarizeAbortRef.current?.abort();
     summarizeAbortRef.current = null;
     // 세션 복원 직후 명시적으로 summarize 시작
@@ -165,8 +164,7 @@ function SearchContent() {
     const needs = papers.filter(p =>
       p.abstract &&
       !currentAnalyses[p.paperId] &&
-      !summarizingIdsRef.current.has(p.paperId) &&
-      !failedSummarizeIdsRef.current.has(p.paperId)
+      !summarizingIdsRef.current.has(p.paperId)
     );
     if (needs.length === 0) return;
 
@@ -202,10 +200,10 @@ function SearchContent() {
           });
         })
         .catch(err => {
-          if (!signal.aborted) {
-            console.error('Failed to summarize:', err);
-            failedSummarizeIdsRef.current.add(paper.paperId);
-          }
+          if (signal.aborted) return;
+          console.error('Failed to summarize:', err);
+          // 실패 마커를 analyses에 기록 → state 변경으로 effect 재실행 보장
+          setAnalyses(prev => ({ ...prev, [paper.paperId]: { failed: true } as PaperAnalysis }));
         })
         .finally(() => {
           summarizingIdsRef.current.delete(paper.paperId);
@@ -234,7 +232,7 @@ function SearchContent() {
       return kept;
     });
     summarizingIdsRef.current = new Set();
-    failedSummarizeIdsRef.current = new Set();
+
     summarizeAbortRef.current?.abort();
     summarizeAbortRef.current = null;
     setDisplayCount(20);
@@ -789,7 +787,7 @@ function SearchContent() {
       markdown += `### ${idx + 1}. ${paper.title}\n`;
       markdown += `- **연도**: ${paper.year || '미상'}\n`;
       markdown += `- **인용수**: ${paper.citationCount || 0}\n`;
-      if (analysis) {
+      if (analysis && !analysis.failed) {
         markdown += `- **개요**: ${analysis.overview}\n`;
         markdown += `- **목표**: ${analysis.goals}\n`;
       }

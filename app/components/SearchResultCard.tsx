@@ -10,6 +10,7 @@ interface PaperAnalysis {
   method: string;
   results: string;
   keywords: string[];
+  failed?: boolean;
 }
 
 interface SearchResultCardProps {
@@ -131,7 +132,7 @@ export function SearchResultCard({
         </div>
 
         {/* 분석 중: 초록 표시 */}
-        {!analysis && paper.abstract && (
+        {(!analysis || analysis.failed) && paper.abstract && (
           <div>
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 bg-slate-500 rounded-full animate-pulse"></div>
@@ -142,7 +143,7 @@ export function SearchResultCard({
         )}
 
         {/* AI 분석 결과 */}
-        {analysis && (
+        {analysis && !analysis.failed && (
           <div className="space-y-4">
             {/* 접을 수 있는 초록 */}
             {paper.abstract && (
