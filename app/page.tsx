@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import posthog from 'posthog-js';
+import { STORAGE_KEYS } from './types/session';
 
 export default function LandingPage() {
   const [query, setQuery] = useState('');
@@ -14,6 +15,11 @@ export default function LandingPage() {
     posthog.capture('landing_page_viewed');
   }, []);
 
+  const navigateToSearch = (searchQuery: string) => {
+    sessionStorage.setItem(STORAGE_KEYS.PENDING_QUERY, searchQuery);
+    router.push('/search');
+  };
+
   const handleSearch = (e: React.FormEvent, location: 'hero' | 'cta') => {
     e.preventDefault();
     if (query.trim()) {
@@ -21,13 +27,13 @@ export default function LandingPage() {
         query: query.trim(),
         location,
       });
-      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+      navigateToSearch(query.trim());
     }
   };
 
   const handleRecommendedClick = (term: string) => {
     posthog.capture('landing_recommended_clicked', { term });
-    router.push(`/search?q=${encodeURIComponent(term)}`);
+    navigateToSearch(term);
   };
 
   const handleCtaClick = () => {

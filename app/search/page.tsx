@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import posthog from 'posthog-js';
 import type { Paper } from '../api/search/route';
@@ -26,7 +25,6 @@ import { STORAGE_KEYS } from '../types/session';
 import { SessionStorageError } from '../lib/session-storage';
 
 function SearchContent() {
-  const searchParams = useSearchParams();
   const [query, setQuery] = useState('');
   const initialSearchDone = useRef(false);
   const searchAbortRef = useRef<AbortController | null>(null);
@@ -220,19 +218,19 @@ function SearchContent() {
     }
   }, [recordSearch]);
 
-  // Handle URL search parameter - runs once after session restoration
+  // Handle pending query from landing page (sessionStorage)
   useEffect(() => {
     if (isRestoringSession || initialSearchDone.current) return;
 
-    const urlQuery = searchParams.get('q');
-    if (urlQuery) {
+    const pendingQuery = sessionStorage.getItem(STORAGE_KEYS.PENDING_QUERY);
+    if (pendingQuery) {
+      sessionStorage.removeItem(STORAGE_KEYS.PENDING_QUERY);
       initialSearchDone.current = true;
-      // 세션이 없으면 자동 생성 (상태 저장을 위해 필요)
       if (!session) {
-        createNewSession(urlQuery.slice(0, 30));
+        createNewSession(pendingQuery.slice(0, 30));
       }
-      setQuery(urlQuery);
-      executeSearch(urlQuery, 'url');
+      setQuery(pendingQuery);
+      executeSearch(pendingQuery, 'url');
     }
   }, [isRestoringSession]);
 

@@ -82,6 +82,7 @@ export const STORAGE_KEYS = {
   SESSION_PREFIX: 'moonlight_session_',
   CURRENT_SESSION_ID: 'moonlight_current_session_id',
   USER_EMAIL: 'userEmail',
+  PENDING_QUERY: 'moonlight_pending_query',
 } as const;
 
 // =============================================================================
