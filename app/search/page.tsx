@@ -560,7 +560,10 @@ function SearchContent() {
   };
 
   const processPapersInBatches = async (papers: Paper[]) => {
-    const signal = searchAbortRef.current?.signal;
+    if (!searchAbortRef.current) {
+      searchAbortRef.current = new AbortController();
+    }
+    const signal = searchAbortRef.current.signal;
     // PostHog: Track batch summarize request
     posthog.capture('papers_summarize_requested', {
       papers_count: papers.length,
@@ -568,9 +571,9 @@ function SearchContent() {
 
     const batchSize = 3;
     for (let i = 0; i < papers.length; i += batchSize) {
-      if (signal?.aborted) return;
+      if (signal.aborted) return;
       const batch = papers.slice(i, i + batchSize);
-      await Promise.all(batch.map(paper => fetchAnalysis(paper, signal!)));
+      await Promise.all(batch.map(paper => fetchAnalysis(paper, signal)));
     }
   };
 
