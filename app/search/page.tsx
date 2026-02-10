@@ -30,6 +30,7 @@ function SearchContent() {
   const [query, setQuery] = useState('');
   const initialSearchDone = useRef(false);
   const searchAbortRef = useRef<AbortController | null>(null);
+  const selectedPapersRef = useRef<Paper[]>([]);
   const [selectedPapers, setSelectedPapers] = useState<Paper[]>([]);
   const [candidatePapers, setCandidatePapers] = useState<Paper[]>([]);
   const [excludedPapers, setExcludedPapers] = useState<Paper[]>([]);
@@ -57,6 +58,8 @@ function SearchContent() {
   const [isContextExpanded, setIsContextExpanded] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showResearchOverview, setShowResearchOverview] = useState(false);
+
+  selectedPapersRef.current = selectedPapers;
 
   // Email identification
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -146,7 +149,14 @@ function SearchContent() {
     setAllPapers([]);
     setCandidatePapers([]);
     setExcludedPapers([]);
-    setAnalyses({});
+    setAnalyses(prev => {
+      const selectedIds = new Set(selectedPapersRef.current.map(p => p.paperId));
+      const kept: Record<string, PaperAnalysis> = {};
+      for (const [id, analysis] of Object.entries(prev)) {
+        if (selectedIds.has(id)) kept[id] = analysis;
+      }
+      return kept;
+    });
     setSummarizingIds(new Set());
     setFailedSummarizeIds(new Set());
     setDisplayCount(20);
