@@ -234,7 +234,9 @@ function SearchContent() {
 
   // Restore state from session when loaded
   useEffect(() => {
-    if (session && !isSessionLoading) {
+    if (isSessionLoading) return;
+
+    if (session) {
       const state = session.state;
       setQuery(state.query);
       setSortBy(state.sortBy as typeof sortBy);
@@ -257,6 +259,9 @@ function SearchContent() {
       refreshSessionList();
       // 세션 복원 완료
       setTimeout(() => setIsRestoringSession(false), 100);
+    } else {
+      // 세션 없음 - 복원 불필요
+      setIsRestoringSession(false);
     }
   }, [session?.id, isSessionLoading]);
 
