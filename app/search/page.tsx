@@ -13,7 +13,16 @@ import { styles } from '../components/styles';
 import { useSessionManager } from '../hooks/useSessionManager';
 import { useResearchAssistant } from '../hooks/useResearchAssistant';
 import { useRelevanceScore } from '../hooks/useRelevanceScore';
+import {
+  SORT_WEIGHT_YEAR_DEFAULT,
+  SORT_WEIGHT_CITATION_DEFAULT,
+  SORT_WEIGHT_YEAR_WITH_RELEVANCE,
+  SORT_WEIGHT_CITATION_WITH_RELEVANCE,
+  SORT_WEIGHT_RELEVANCE,
+  DEFAULT_RELEVANCE_SCORE,
+} from '../features/relevance';
 import type { PaperAnalysis, ChatMessage, ContextSummary } from '../types/session';
+import { STORAGE_KEYS } from '../types/session';
 import { SessionStorageError } from '../lib/session-storage';
 
 function SearchContent() {
@@ -115,7 +124,7 @@ function SearchContent() {
 
   // Check localStorage for email on mount
   useEffect(() => {
-    const storedEmail = localStorage.getItem('userEmail');
+    const storedEmail = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
     if (storedEmail) {
       setUserEmail(storedEmail);
       posthog.identify(storedEmail, { email: storedEmail });
@@ -136,6 +145,8 @@ function SearchContent() {
       const doSearch = async () => {
         setLoading(true);
         setError('');
+        setAllPapers([]);
+        setCandidatePapers([]);
         setExcludedPapers([]);
         setDisplayCount(20);
 
@@ -284,8 +295,8 @@ function SearchContent() {
     const isCurrentSession = session?.id === id;
     const result = deleteSessionById(id);
 
-    if (result.success && isCurrentSession && result.newSession) {
-      // Clear state for new session
+    if (result.success && isCurrentSession) {
+      // Clear state when current session is deleted
       setQuery('');
       setSelectedPapers([]);
       setCandidatePapers([]);
@@ -326,7 +337,7 @@ function SearchContent() {
     const email = emailInput.trim();
     if (!email || !email.includes('@')) return;
 
-    localStorage.setItem('userEmail', email);
+    localStorage.setItem(STORAGE_KEYS.USER_EMAIL, email);
     setUserEmail(email);
     setShowEmailModal(false);
 
@@ -347,6 +358,8 @@ function SearchContent() {
 
     setLoading(true);
     setError('');
+    setAllPapers([]);
+    setCandidatePapers([]);
     setExcludedPapers([]);
     setDisplayCount(20); // 새 검색 시 초기화
 
@@ -484,38 +497,55 @@ function SearchContent() {
   const sortPapers = (papers: Paper[], sortType: typeof sortBy): Paper[] => {
     const sorted = [...papers];
     const currentYear = new Date().getFullYear();
+    const hasSelected = selectedPapers.length > 0;
+
+    const getYearScore = (year: number) => {
+      const age = currentYear - year;
+      if (age <= 1) return 1.0;
+      if (age <= 5) return 0.8;
+      if (age <= 10) return 0.5;
+      if (age <= 15) return 0.25;
+      return 0.1;
+    };
+
+    const getCitationScore = (citations: number) => Math.log10(citations + 1) / 5;
+
+    const getRelevanceScore = (paperId: string) =>
+      (relevanceScores[paperId] ?? DEFAULT_RELEVANCE_SCORE) / 100;
 
     switch (sortType) {
       case 'recommended':
-        // 최근 연구 우선 + 인용수 높은 중요 연구 반영
         return sorted.sort((a, b) => {
-          const yearA = a.year || 2000;
-          const yearB = b.year || 2000;
-          const citationsA = a.citationCount || 0;
-          const citationsB = b.citationCount || 0;
+          const yearScoreA = getYearScore(a.year || 2000);
+          const yearScoreB = getYearScore(b.year || 2000);
+          const citationScoreA = getCitationScore(a.citationCount || 0);
+          const citationScoreB = getCitationScore(b.citationCount || 0);
 
-          // 연도 점수: 구간별 가중치
-          const getYearScore = (year: number) => {
-            const age = currentYear - year;
-            if (age <= 1) return 1.0;      // 0-1년: 최고 가중치
-            if (age <= 5) return 0.8;      // 1-5년: 높은 가중치
-            if (age <= 10) return 0.5;     // 5-10년: 중간 가중치
-            if (age <= 15) return 0.25;    // 10-15년: 낮은 가중치
-            return 0.1;                     // 15년+: 최소 가중치
-          };
+          if (hasSelected) {
+            const relA = getRelevanceScore(a.paperId);
+            const relB = getRelevanceScore(b.paperId);
+            const scoreA = yearScoreA * SORT_WEIGHT_YEAR_WITH_RELEVANCE
+              + citationScoreA * SORT_WEIGHT_CITATION_WITH_RELEVANCE
+              + relA * SORT_WEIGHT_RELEVANCE;
+            const scoreB = yearScoreB * SORT_WEIGHT_YEAR_WITH_RELEVANCE
+              + citationScoreB * SORT_WEIGHT_CITATION_WITH_RELEVANCE
+              + relB * SORT_WEIGHT_RELEVANCE;
+            return scoreB - scoreA;
+          }
 
-          const yearScoreA = getYearScore(yearA);
-          const yearScoreB = getYearScore(yearB);
-
-          // 인용수 점수: 로그 스케일로 정규화 (영향력 있는 논문)
-          const citationScoreA = Math.log10(citationsA + 1) / 5;
-          const citationScoreB = Math.log10(citationsB + 1) / 5;
-
-          // 종합 점수: 연도 60% + 인용수 40%
-          const scoreA = yearScoreA * 0.6 + citationScoreA * 0.4;
-          const scoreB = yearScoreB * 0.6 + citationScoreB * 0.4;
-
+          const scoreA = yearScoreA * SORT_WEIGHT_YEAR_DEFAULT + citationScoreA * SORT_WEIGHT_CITATION_DEFAULT;
+          const scoreB = yearScoreB * SORT_WEIGHT_YEAR_DEFAULT + citationScoreB * SORT_WEIGHT_CITATION_DEFAULT;
           return scoreB - scoreA;
+        });
+      case 'relevance':
+        if (!hasSelected) {
+          return sortPapers(papers, 'recommended');
+        }
+        return sorted.sort((a, b) => {
+          const relA = relevanceScores[a.paperId] ?? DEFAULT_RELEVANCE_SCORE;
+          const relB = relevanceScores[b.paperId] ?? DEFAULT_RELEVANCE_SCORE;
+          if (relA !== relB) return relB - relA;
+          return (b.citationCount || 0) - (a.citationCount || 0);
         });
       case 'year-desc': return sorted.sort((a, b) => (b.year || 0) - (a.year || 0));
       case 'year-asc': return sorted.sort((a, b) => (a.year || 0) - (b.year || 0));
@@ -884,6 +914,19 @@ function SearchContent() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
+        {!session ? (
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-center">
+              <p className={`text-lg font-medium ${styles.text.secondary} mb-3`}>연구 노트가 없습니다</p>
+              <button
+                onClick={handleCreateNewSession}
+                className={`${styles.button.primary} px-5 py-2.5`}
+              >
+                새 연구 노트 만들기
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className={`${assistantActive && !sidebarCollapsed ? 'max-w-4xl' : 'max-w-6xl'} mx-auto px-6 py-6 h-screen overflow-y-auto transition-all duration-300`}>
           {/* 세션 타이틀 헤더 */}
           <div className="mb-5 flex items-center justify-between">
@@ -1032,6 +1075,15 @@ function SearchContent() {
                     onTranslate={translateAbstract}
                   />
                 ))}
+                {candidatePapers.length === 0 && loading && (
+                  <div className={`text-center ${styles.text.muted} py-16`}>
+                    <svg className="w-8 h-8 mx-auto mb-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <p className="text-base">검색 중...</p>
+                  </div>
+                )}
                 {candidatePapers.length === 0 && !loading && (
                   <div className={`text-center ${styles.text.muted} py-16`}>
                     <svg className="w-12 h-12 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1058,6 +1110,7 @@ function SearchContent() {
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Right Sidebar - Research Assistant */}

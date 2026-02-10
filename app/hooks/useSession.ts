@@ -19,6 +19,7 @@ import {
   getCurrentSessionId,
   setCurrentSessionId,
 } from '../lib/session-storage';
+import { STORAGE_KEYS } from '../types/session';
 import {
   addToSessionList,
   updateSessionListItem,
@@ -109,12 +110,7 @@ export function useSession() {
       }
     }
 
-    // Create new session if none exists
-    const newSession = createSession('새 연구');
-    setSession(newSession);
-    saveSession(newSession);
-    addToSessionList(newSession);
-    setCurrentSessionId(newSession.id);
+    // No current session — stay null (user creates via + button)
     setIsLoading(false);
   }, []);
 
@@ -175,6 +171,22 @@ export function useSession() {
       return newSession;
     });
     setCurrentSessionId(newSession.id);
+  }, []);
+
+  // Cancel pending debounced save (used before session deletion)
+  const cancelPendingSave = useCallback(() => {
+    debouncedSaveRef.current?.cancel();
+  }, []);
+
+  // Replace current session without saving the old one (used when deleting current session)
+  const replaceSession = useCallback((newSession: Session | null) => {
+    debouncedSaveRef.current?.cancel();
+    setSession(newSession);
+    if (newSession) {
+      setCurrentSessionId(newSession.id);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_SESSION_ID);
+    }
   }, []);
 
   // Create new session (with limit check)
@@ -352,6 +364,8 @@ export function useSession() {
     session,
     isLoading,
     switchSession,
+    cancelPendingSave,
+    replaceSession,
     createNewSession,
     renameSession,
     recordSearch,

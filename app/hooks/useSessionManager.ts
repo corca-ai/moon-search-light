@@ -115,17 +115,34 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     (id: string) => {
       const isCurrentSession = session.session?.id === id;
 
+      // Cancel pending debounced save to prevent it from re-writing stale data
+      session.cancelPendingSave();
+
+      // Remove from storage and session list
       sessionList.remove(id);
 
       if (isCurrentSession) {
-        // Create a new session if we deleted the current one
-        const result = createNewSession('새 연구');
-        return { success: true, newSession: result.success ? result.session : null };
+        // Read remaining sessions from localStorage (React state is stale here)
+        const remaining = getSessionList().filter((item) => item.id !== id);
+        if (remaining.length > 0) {
+          const next = loadSession(remaining[0].id);
+          if (next) {
+            session.replaceSession(next);
+            sessionList.refresh();
+            return { success: true, newSession: next };
+          }
+        }
+        // No remaining sessions — clear current
+        session.replaceSession(null);
+        sessionList.refresh();
+        return { success: true, newSession: null };
       }
 
+      // Refresh to ensure React state matches localStorage
+      sessionList.refresh();
       return { success: true, newSession: null };
     },
-    [session, sessionList, createNewSession]
+    [session, sessionList]
   );
 
   // Rename session

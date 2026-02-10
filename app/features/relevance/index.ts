@@ -47,6 +47,13 @@ export {
   shouldLimitCandidates,
   exceedsBatchLimit,
   canCalculateRelevance,
+  // 정렬 가중치
+  SORT_WEIGHT_YEAR_DEFAULT,
+  SORT_WEIGHT_CITATION_DEFAULT,
+  SORT_WEIGHT_YEAR_WITH_RELEVANCE,
+  SORT_WEIGHT_CITATION_WITH_RELEVANCE,
+  SORT_WEIGHT_RELEVANCE,
+  DEFAULT_RELEVANCE_SCORE,
 } from './principles';
 
 // =============================================================================

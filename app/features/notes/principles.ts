@@ -81,6 +81,7 @@ export const STORAGE_KEYS = {
   SESSION_LIST: 'moonlight_session_list',
   SESSION_PREFIX: 'moonlight_session_',
   CURRENT_SESSION_ID: 'moonlight_current_session_id',
+  USER_EMAIL: 'userEmail',
 } as const;
 
 // =============================================================================

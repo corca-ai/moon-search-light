@@ -105,3 +105,25 @@ export function canCalculateRelevance(
 ): boolean {
   return selectedCount > 0 && candidateCount > 0;
 }
+
+// =============================================================================
+// 8. 정렬 가중치
+// =============================================================================
+
+/** 추천순 기본 연도 가중치 (선택 논문 없을 때) */
+export const SORT_WEIGHT_YEAR_DEFAULT = 0.6;
+
+/** 추천순 기본 인용수 가중치 (선택 논문 없을 때) */
+export const SORT_WEIGHT_CITATION_DEFAULT = 0.4;
+
+/** 추천순 연도 가중치 (선택 논문 있을 때) */
+export const SORT_WEIGHT_YEAR_WITH_RELEVANCE = 0.35;
+
+/** 추천순 인용수 가중치 (선택 논문 있을 때) */
+export const SORT_WEIGHT_CITATION_WITH_RELEVANCE = 0.25;
+
+/** 추천순 유사도 가중치 (선택 논문 있을 때) */
+export const SORT_WEIGHT_RELEVANCE = 0.4;
+
+/** 유사도 미계산 논문의 기본값 */
+export const DEFAULT_RELEVANCE_SCORE = 50;

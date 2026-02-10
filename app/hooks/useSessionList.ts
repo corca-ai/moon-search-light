@@ -19,9 +19,18 @@ import { addToSessionList } from '../lib/session-list';
 export function useSessionList() {
   const [sessionList, setSessionList] = useState<SessionListItem[]>([]);
 
-  // Load session list on mount
+  // Load session list on mount (clean up orphaned entries)
   useEffect(() => {
-    setSessionList(getSessionList());
+    const list = getSessionList();
+    const valid = list.filter((item) => loadSession(item.id) !== null);
+    if (valid.length !== list.length) {
+      for (const item of list) {
+        if (!valid.some((v) => v.id === item.id)) {
+          removeFromSessionList(item.id);
+        }
+      }
+    }
+    setSessionList(valid);
   }, []);
 
   // Listen for session updates to refresh the list
@@ -44,11 +53,13 @@ export function useSessionList() {
     return loadSession(id);
   }, []);
 
-  // Delete a session
+  // Delete a session (list first, then data — if list update fails, data stays intact)
   const remove = useCallback((id: string) => {
-    deleteSession(id);
-    removeFromSessionList(id);
-    setSessionList((prev) => prev.filter((item) => item.id !== id));
+    const listRemoved = removeFromSessionList(id);
+    if (listRemoved) {
+      deleteSession(id);
+    }
+    setSessionList(getSessionList());
   }, []);
 
   // Rename a session
