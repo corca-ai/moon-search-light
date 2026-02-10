@@ -20,14 +20,13 @@ import {
   SORT_WEIGHT_RELEVANCE,
   DEFAULT_RELEVANCE_SCORE,
 } from '../features/relevance';
-import type { PaperAnalysis, ChatMessage, ContextSummary } from '../types/session';
+import type { Session, PaperAnalysis, ChatMessage, ContextSummary } from '../types/session';
 import { STORAGE_KEYS } from '../types/session';
 import { SessionStorageError } from '../lib/session-storage';
 
 function SearchContent() {
   const [query, setQuery] = useState('');
-  const initialSearchDone = useRef(false);
-  const skipSessionRestoreRef = useRef(false);
+  const [isReady, setIsReady] = useState(false);
   const searchAbortRef = useRef<AbortController | null>(null);
   const selectedPapersRef = useRef<Paper[]>([]);
   const [selectedPapers, setSelectedPapers] = useState<Paper[]>([]);
@@ -43,7 +42,6 @@ function SearchContent() {
   const [chatInput, setChatInput] = useState('');
   const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
   const [failedSummarizeIds, setFailedSummarizeIds] = useState<Set<string>>(new Set());
-  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
@@ -136,6 +134,26 @@ function SearchContent() {
     }
   }, []);
 
+  const restoreFromSession = (s: Session) => {
+    const state = s.state;
+    setQuery(state.query);
+    setSortBy(state.sortBy as typeof sortBy);
+    setSelectedPapers(state.selectedPapers);
+    setExcludedPapers(state.excludedPapers);
+    setAnalyses(state.analyses);
+    setTranslations(state.translations);
+    setInterestSummary(state.interestSummary);
+    setContextSummary(state.contextSummary);
+    restoreAssistantState(state.assistantActive, state.chatMessages);
+    const searchResults = state.searchResults || [];
+    setAllPapers(searchResults);
+    const selectedIds = new Set(state.selectedPapers.map(p => p.paperId));
+    const excludedIds = new Set(state.excludedPapers.map(p => p.paperId));
+    const candidates = searchResults.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
+    setCandidatePapers(candidates.slice(0, 20));
+    setDisplayCount(20);
+  };
+
   // Shared search execution - single source of truth for all search paths
   const executeSearch = useCallback(async (searchQuery: string, source: 'form' | 'url' = 'form') => {
     searchAbortRef.current?.abort();
@@ -219,72 +237,38 @@ function SearchContent() {
     }
   }, [recordSearch]);
 
-  // Handle pending query from landing page (sessionStorage)
+  // Single initialization: pending query check → session restore → ready
   useEffect(() => {
-    if (isRestoringSession || initialSearchDone.current) return;
+    if (isSessionLoading || isReady) return;
 
+    // 1. Landing에서 전달된 pending query 확인
     const pendingQuery = sessionStorage.getItem(STORAGE_KEYS.PENDING_QUERY);
     if (pendingQuery) {
       sessionStorage.removeItem(STORAGE_KEYS.PENDING_QUERY);
-      initialSearchDone.current = true;
       if (!session) {
-        skipSessionRestoreRef.current = true;
         createNewSession(pendingQuery.slice(0, 30));
       }
       setQuery(pendingQuery);
+      setIsReady(true);
       executeSearch(pendingQuery, 'url');
-    }
-  }, [isRestoringSession]);
-
-  // Restore state from session when loaded
-  useEffect(() => {
-    if (isSessionLoading) return;
-
-    if (skipSessionRestoreRef.current) {
-      skipSessionRestoreRef.current = false;
-      if (!isRestoringSession) return;
-      setIsRestoringSession(false);
       return;
     }
 
+    // 2. 기존 세션 복원
     if (session) {
-      const state = session.state;
-      setQuery(state.query);
-      setSortBy(state.sortBy as typeof sortBy);
-      setSelectedPapers(state.selectedPapers);
-      setExcludedPapers(state.excludedPapers);
-      setAnalyses(state.analyses);
-      setTranslations(state.translations);
-      setInterestSummary(state.interestSummary);
-      setContextSummary(state.contextSummary);
-      restoreAssistantState(state.assistantActive, state.chatMessages);
-      // Restore search results
-      const searchResults = state.searchResults || [];
-      setAllPapers(searchResults);
-      // Calculate candidate papers (not selected, not excluded)
-      const selectedIds = new Set(state.selectedPapers.map(p => p.paperId));
-      const excludedIds = new Set(state.excludedPapers.map(p => p.paperId));
-      const candidates = searchResults.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
-      setCandidatePapers(candidates.slice(0, 20));
-      setDisplayCount(20);
+      restoreFromSession(session);
       refreshSessionList();
-      // 세션 복원 완료
-      setTimeout(() => setIsRestoringSession(false), 100);
-    } else {
-      // 세션 없음 - 복원 불필요
-      setIsRestoringSession(false);
     }
-  }, [session?.id, isSessionLoading]);
+
+    setIsReady(true);
+  }, [isSessionLoading, isReady]);
 
   // Handle session switch
   const handleSessionSwitch = (id: string) => {
     const result = switchSession(id);
     if (result.success) {
-      // Clear current state
-      setCandidatePapers([]);
-      setAllPapers([]);
-      setDisplayCount(20);
-      resetAssistant();
+      restoreFromSession(result.session);
+      refreshSessionList();
 
       posthog.capture('note_switched', {
         note_id: id,
@@ -641,7 +625,7 @@ function SearchContent() {
 
   useEffect(() => {
     // 세션 복원 중이거나 요약 중인 논문이 있으면 대기
-    if (isRestoringSession || summarizingIds.size > 0) return;
+    if (!isReady || summarizingIds.size > 0) return;
 
     // 실패한 논문은 제외하는 필터 함수
     const canSummarize = (p: Paper) =>
@@ -663,7 +647,7 @@ function SearchContent() {
         processPapersInBatches(papersToSummarize);
       }
     }
-  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds, isRestoringSession, failedSummarizeIds]);
+  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds, isReady, failedSummarizeIds]);
 
   const handleShowDetailPaper = (paper: Paper | null) => {
     setDetailPaper(paper);
@@ -680,8 +664,7 @@ function SearchContent() {
 
   // 관심사 요약 업데이트 (디바운스)
   useEffect(() => {
-    // 세션 복원 중에는 API 호출 스킵 (이미 저장된 값 사용)
-    if (isRestoringSession) return;
+    if (!isReady) return;
 
     if (selectedPapers.length === 0) {
       setInterestSummary('');
@@ -705,10 +688,10 @@ function SearchContent() {
       } catch (err) {
         console.error('Failed to fetch interest summary:', err);
       }
-    }, 500); // 500ms 디바운스
+    }, 500);
 
     return () => clearTimeout(timer);
-  }, [selectedPapers, isRestoringSession]);
+  }, [selectedPapers, isReady]);
 
   // 통합 컨텍스트 분석
   const loadContextSummary = async () => {
