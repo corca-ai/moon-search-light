@@ -27,6 +27,7 @@ import { SessionStorageError } from '../lib/session-storage';
 function SearchContent() {
   const [query, setQuery] = useState('');
   const initialSearchDone = useRef(false);
+  const skipSessionRestoreRef = useRef(false);
   const searchAbortRef = useRef<AbortController | null>(null);
   const selectedPapersRef = useRef<Paper[]>([]);
   const [selectedPapers, setSelectedPapers] = useState<Paper[]>([]);
@@ -227,6 +228,7 @@ function SearchContent() {
       sessionStorage.removeItem(STORAGE_KEYS.PENDING_QUERY);
       initialSearchDone.current = true;
       if (!session) {
+        skipSessionRestoreRef.current = true;
         createNewSession(pendingQuery.slice(0, 30));
       }
       setQuery(pendingQuery);
@@ -237,6 +239,13 @@ function SearchContent() {
   // Restore state from session when loaded
   useEffect(() => {
     if (isSessionLoading) return;
+
+    if (skipSessionRestoreRef.current) {
+      skipSessionRestoreRef.current = false;
+      if (!isRestoringSession) return;
+      setIsRestoringSession(false);
+      return;
+    }
 
     if (session) {
       const state = session.state;
