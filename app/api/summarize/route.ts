@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       response_format: zodResponseFormat(PaperAnalysis, 'paper_analysis'),
-    }, { signal: request.signal });
+    });
 
     const analysis = JSON.parse(completion.choices[0].message.content || '{}');
 
