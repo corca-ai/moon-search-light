@@ -227,6 +227,10 @@ function SearchContent() {
     const urlQuery = searchParams.get('q');
     if (urlQuery) {
       initialSearchDone.current = true;
+      // 세션이 없으면 자동 생성 (상태 저장을 위해 필요)
+      if (!session) {
+        createNewSession(urlQuery.slice(0, 30));
+      }
       setQuery(urlQuery);
       executeSearch(urlQuery, 'url');
     }
