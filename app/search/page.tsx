@@ -524,62 +524,7 @@ function SearchContent() {
     }
   };
 
-  const fetchAnalysis = async (paper: Paper, signal: AbortSignal) => {
-    if (!paper.abstract) return;
-    if (summarizingIdsRef.current.has(paper.paperId) || failedSummarizeIdsRef.current.has(paper.paperId)) return;
-
-    summarizingIdsRef.current.add(paper.paperId);
-
-    try {
-      const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
-      const response = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(email ? { 'x-user-email': email } : {}),
-        },
-        body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
-        signal,
-      });
-      if (signal.aborted) return;
-      if (response.ok) {
-        const analysis = await response.json();
-        setAnalyses(prev => {
-          const newAnalyses = { ...prev, [paper.paperId]: analysis };
-          recordAnalysisDone(paper.paperId, analysis, newAnalyses);
-          return newAnalyses;
-        });
-      } else {
-        failedSummarizeIdsRef.current.add(paper.paperId);
-      }
-    } catch (err) {
-      if (signal.aborted) return;
-      console.error('Failed to fetch analysis:', err);
-      failedSummarizeIdsRef.current.add(paper.paperId);
-    } finally {
-      if (!signal.aborted) {
-        summarizingIdsRef.current.delete(paper.paperId);
-      }
-    }
-  };
-
-  const processPapersInBatches = async (papers: Paper[]) => {
-    if (!searchAbortRef.current) {
-      searchAbortRef.current = new AbortController();
-    }
-    const signal = searchAbortRef.current.signal;
-    // PostHog: Track batch summarize request
-    posthog.capture('papers_summarize_requested', {
-      papers_count: papers.length,
-    });
-
-    const batchSize = 3;
-    for (let i = 0; i < papers.length; i += batchSize) {
-      if (signal.aborted) return;
-      const batch = papers.slice(i, i + batchSize);
-      await Promise.all(batch.map(paper => fetchAnalysis(paper, signal)));
-    }
-  };
+  // No separate fetchAnalysis/processPapersInBatches — summarize logic lives in the effect below
 
   const translateAbstract = async (paperId: string, abstract: string) => {
     if (translations[paperId] || translatingIds.has(paperId)) return;
@@ -620,17 +565,61 @@ function SearchContent() {
   useEffect(() => {
     if (!isReady) return;
 
-    const needsSummarize = (p: Paper) =>
-      p.abstract && !analyses[p.paperId] && !summarizingIdsRef.current.has(p.paperId) && !failedSummarizeIdsRef.current.has(p.paperId);
+    const displayed = assistantActive
+      ? selectedPapers
+      : [...selectedPapers, ...sortPapers(candidatePapers, sortBy)];
 
-    const unsummarizedSelected = selectedPapers.filter(needsSummarize);
-    const sortedCandidates = assistantActive ? [] : sortPapers(candidatePapers, sortBy);
-    const unsummarizedCandidates = sortedCandidates.filter(needsSummarize);
-    const papersToSummarize = [...unsummarizedSelected, ...unsummarizedCandidates.slice(0, 3)];
+    const needs = displayed.filter(p =>
+      p.abstract &&
+      !analyses[p.paperId] &&
+      !summarizingIdsRef.current.has(p.paperId) &&
+      !failedSummarizeIdsRef.current.has(p.paperId)
+    );
 
-    if (papersToSummarize.length > 0) {
-      processPapersInBatches(papersToSummarize);
+    if (needs.length === 0) return;
+
+    if (!searchAbortRef.current) {
+      searchAbortRef.current = new AbortController();
     }
+    const signal = searchAbortRef.current.signal;
+    const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
+    const batch = needs.slice(0, 3);
+
+    batch.forEach(paper => {
+      summarizingIdsRef.current.add(paper.paperId);
+
+      fetch('/api/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(email ? { 'x-user-email': email } : {}),
+        },
+        body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
+        signal,
+      })
+        .then(res => {
+          if (signal.aborted) return null;
+          if (!res.ok) throw new Error('API error');
+          return res.json();
+        })
+        .then(analysis => {
+          if (!analysis || signal.aborted) return;
+          setAnalyses(prev => {
+            const next = { ...prev, [paper.paperId]: analysis };
+            recordAnalysisDone(paper.paperId, analysis, next);
+            return next;
+          });
+        })
+        .catch(err => {
+          if (!signal.aborted) {
+            console.error('Failed to summarize:', err);
+            failedSummarizeIdsRef.current.add(paper.paperId);
+          }
+        })
+        .finally(() => {
+          summarizingIdsRef.current.delete(paper.paperId);
+        });
+    });
   }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, isReady]);
 
   const handleShowDetailPaper = (paper: Paper | null) => {
