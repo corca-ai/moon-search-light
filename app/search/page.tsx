@@ -40,8 +40,8 @@ function SearchContent() {
   const [sortBy, setSortBy] = useState<'relevance' | 'recommended' | 'year-desc' | 'year-asc' | 'citations'>('recommended');
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState('');
-  const [summarizingIds, setSummarizingIds] = useState<Set<string>>(new Set());
-  const [failedSummarizeIds, setFailedSummarizeIds] = useState<Set<string>>(new Set());
+  const summarizingIdsRef = useRef<Set<string>>(new Set());
+  const failedSummarizeIdsRef = useRef<Set<string>>(new Set());
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [detailPaper, setDetailPaper] = useState<Paper | null>(null);
@@ -152,8 +152,8 @@ function SearchContent() {
     const candidates = searchResults.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
     setCandidatePapers(candidates.slice(0, 20));
     setDisplayCount(20);
-    setSummarizingIds(new Set());
-    setFailedSummarizeIds(new Set());
+    summarizingIdsRef.current = new Set();
+    failedSummarizeIdsRef.current = new Set();
   };
 
   // Shared search execution - single source of truth for all search paths
@@ -176,8 +176,8 @@ function SearchContent() {
       }
       return kept;
     });
-    setSummarizingIds(new Set());
-    setFailedSummarizeIds(new Set());
+    summarizingIdsRef.current = new Set();
+    failedSummarizeIdsRef.current = new Set();
     setDisplayCount(20);
 
     try {
@@ -525,12 +525,10 @@ function SearchContent() {
   };
 
   const fetchAnalysis = async (paper: Paper, signal: AbortSignal) => {
-    if (!paper.abstract || analyses[paper.paperId]) return;
+    if (!paper.abstract) return;
+    if (summarizingIdsRef.current.has(paper.paperId) || failedSummarizeIdsRef.current.has(paper.paperId)) return;
 
-    // 이미 요약 중이거나 실패한 논문은 건너뛰기
-    if (summarizingIds.has(paper.paperId) || failedSummarizeIds.has(paper.paperId)) return;
-
-    setSummarizingIds(prev => new Set(prev).add(paper.paperId));
+    summarizingIdsRef.current.add(paper.paperId);
 
     try {
       const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
@@ -552,21 +550,15 @@ function SearchContent() {
           return newAnalyses;
         });
       } else {
-        // API 오류 시 실패 목록에 추가
-        setFailedSummarizeIds(prev => new Set(prev).add(paper.paperId));
+        failedSummarizeIdsRef.current.add(paper.paperId);
       }
     } catch (err) {
       if (signal.aborted) return;
       console.error('Failed to fetch analysis:', err);
-      // 네트워크 오류 시 실패 목록에 추가
-      setFailedSummarizeIds(prev => new Set(prev).add(paper.paperId));
+      failedSummarizeIdsRef.current.add(paper.paperId);
     } finally {
       if (!signal.aborted) {
-        setSummarizingIds(prev => {
-          const next = new Set(prev);
-          next.delete(paper.paperId);
-          return next;
-        });
+        summarizingIdsRef.current.delete(paper.paperId);
       }
     }
   };
@@ -626,30 +618,20 @@ function SearchContent() {
   };
 
   useEffect(() => {
-    // 세션 복원 중이거나 요약 중인 논문이 있으면 대기
-    if (!isReady || summarizingIds.size > 0) return;
+    if (!isReady) return;
 
-    // 실패한 논문은 제외하는 필터 함수
-    const canSummarize = (p: Paper) =>
-      p.abstract && !analyses[p.paperId] && !summarizingIds.has(p.paperId) && !failedSummarizeIds.has(p.paperId);
+    const needsSummarize = (p: Paper) =>
+      p.abstract && !analyses[p.paperId] && !summarizingIdsRef.current.has(p.paperId) && !failedSummarizeIdsRef.current.has(p.paperId);
 
-    if (assistantActive) {
-      // Assistant 활성 시: 선택된 논문만 요약
-      const unsummarizedSelected = selectedPapers.filter(canSummarize);
-      if (unsummarizedSelected.length > 0) {
-        processPapersInBatches(unsummarizedSelected);
-      }
-    } else {
-      // Assistant 비활성 시: 선택된 논문 전체 + 정렬 기준으로 상위 3개
-      const unsummarizedSelected = selectedPapers.filter(canSummarize);
-      const sortedCandidates = sortPapers(candidatePapers, sortBy);
-      const unsummarizedCandidates = sortedCandidates.filter(canSummarize);
-      const papersToSummarize = [...unsummarizedSelected, ...unsummarizedCandidates.slice(0, 3)];
-      if (papersToSummarize.length > 0) {
-        processPapersInBatches(papersToSummarize);
-      }
+    const unsummarizedSelected = selectedPapers.filter(needsSummarize);
+    const sortedCandidates = assistantActive ? [] : sortPapers(candidatePapers, sortBy);
+    const unsummarizedCandidates = sortedCandidates.filter(needsSummarize);
+    const papersToSummarize = [...unsummarizedSelected, ...unsummarizedCandidates.slice(0, 3)];
+
+    if (papersToSummarize.length > 0) {
+      processPapersInBatches(papersToSummarize);
     }
-  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, summarizingIds, isReady, failedSummarizeIds]);
+  }, [selectedPapers, candidatePapers, assistantActive, sortBy, analyses, isReady]);
 
   const handleShowDetailPaper = (paper: Paper | null) => {
     setDetailPaper(paper);
