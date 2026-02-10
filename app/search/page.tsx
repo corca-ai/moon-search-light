@@ -29,6 +29,7 @@ function SearchContent() {
   const searchParams = useSearchParams();
   const [query, setQuery] = useState('');
   const initialSearchDone = useRef(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
   const [selectedPapers, setSelectedPapers] = useState<Paper[]>([]);
   const [candidatePapers, setCandidatePapers] = useState<Paper[]>([]);
   const [excludedPapers, setExcludedPapers] = useState<Paper[]>([]);
@@ -133,75 +134,93 @@ function SearchContent() {
     }
   }, []);
 
-  // Handle URL search parameter for auto-search from landing page
+  // Shared search execution - single source of truth for all search paths
+  const executeSearch = useCallback(async (searchQuery: string, source: 'form' | 'url' = 'form') => {
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    const { signal } = controller;
+
+    setLoading(true);
+    setError('');
+    setAllPapers([]);
+    setCandidatePapers([]);
+    setExcludedPapers([]);
+    setAnalyses({});
+    setSummarizingIds(new Set());
+    setFailedSummarizeIds(new Set());
+    setDisplayCount(20);
+
+    try {
+      const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
+      const response = await fetch(`/api/search?query=${encodeURIComponent(searchQuery)}`, {
+        headers: email ? { 'x-user-email': email } : {},
+        signal,
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error || 'Failed to fetch papers');
+
+      const papers = [...(data.allPapers || data.papers || [])];
+
+      if (papers.length > 0) {
+        const titles = papers.map(p => p.title);
+        const snapshotResponse = await fetch('/api/paper-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ titles }),
+          signal,
+        });
+
+        if (snapshotResponse.ok) {
+          const snapshotData = await snapshotResponse.json();
+          papers.forEach(paper => {
+            if (snapshotData[paper.title]) {
+              paper.snapshots = snapshotData[paper.title].snapshots;
+              paper.pdfUrl = snapshotData[paper.title].pdfUrl;
+            }
+          });
+        }
+      }
+
+      if (signal.aborted) return;
+      setAllPapers(papers);
+      setCandidatePapers(papers.slice(0, 20));
+      setTotal(data.total);
+      if (source === 'form') {
+        addSystemMessage(`"${searchQuery}" 검색 → ${papers.length}개 결과`);
+      }
+      recordSearch(searchQuery, papers.length, papers);
+
+      posthog.capture('paper_searched', {
+        query: searchQuery,
+        results_count: papers.length,
+        total_available: data.total,
+        ...(source === 'url' ? { source: 'landing_page' } : {}),
+      });
+    } catch (err) {
+      if (signal.aborted) return;
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMessage);
+      setAllPapers([]);
+      setCandidatePapers([]);
+      posthog.captureException(err instanceof Error ? err : new Error(errorMessage));
+    } finally {
+      if (!signal.aborted) setLoading(false);
+    }
+  }, [recordSearch]);
+
+  // Handle URL search parameter - runs once after session restoration
   useEffect(() => {
     if (isRestoringSession || initialSearchDone.current) return;
 
     const urlQuery = searchParams.get('q');
-    if (urlQuery && !loading) {
+    if (urlQuery) {
       initialSearchDone.current = true;
       setQuery(urlQuery);
-      // Trigger search programmatically
-      const doSearch = async () => {
-        setLoading(true);
-        setError('');
-        setAllPapers([]);
-        setCandidatePapers([]);
-        setExcludedPapers([]);
-        setDisplayCount(20);
-
-        try {
-          const response = await fetch(`/api/search?query=${encodeURIComponent(urlQuery)}`, {
-            headers: userEmail ? { 'x-user-email': userEmail } : {},
-          });
-          const data = await response.json();
-
-          if (!response.ok) throw new Error(data.error || 'Failed to fetch papers');
-
-          const papers = [...(data.allPapers || data.papers || [])];
-
-          if (papers.length > 0) {
-            const titles = papers.map(p => p.title);
-            const snapshotResponse = await fetch('/api/paper-images', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ titles }),
-            });
-
-            if (snapshotResponse.ok) {
-              const snapshotData = await snapshotResponse.json();
-              papers.forEach(paper => {
-                if (snapshotData[paper.title]) {
-                  paper.snapshots = snapshotData[paper.title].snapshots;
-                  paper.pdfUrl = snapshotData[paper.title].pdfUrl;
-                }
-              });
-            }
-          }
-
-          setAllPapers(papers);
-          setCandidatePapers(papers.slice(0, 20));
-          setTotal(data.total);
-          recordSearch(urlQuery, papers.length, papers);
-
-          posthog.capture('paper_searched', {
-            query: urlQuery,
-            results_count: papers.length,
-            total_available: data.total,
-            source: 'landing_page',
-          });
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-          setError(errorMessage);
-          setAllPapers([]);
-          setCandidatePapers([]);
-        } finally {
-          setLoading(false);
-        }
-      };
-      doSearch();
+      executeSearch(urlQuery, 'url');
     }
-  }, [searchParams, isRestoringSession, loading, userEmail]);
+  }, [isRestoringSession]);
 
   // Restore state from session when loaded
   useEffect(() => {
@@ -355,68 +374,7 @@ function SearchContent() {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-
-    setLoading(true);
-    setError('');
-    setAllPapers([]);
-    setCandidatePapers([]);
-    setExcludedPapers([]);
-    setDisplayCount(20); // 새 검색 시 초기화
-
-    try {
-      const response = await fetch(`/api/search?query=${encodeURIComponent(query)}`, {
-        headers: userEmail ? { 'x-user-email': userEmail } : {},
-      });
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.error || 'Failed to fetch papers');
-
-      const papers = [...(data.allPapers || data.papers || [])];
-
-      if (papers.length > 0) {
-        const titles = papers.map(p => p.title);
-        const snapshotResponse = await fetch('/api/paper-images', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ titles }),
-        });
-
-        if (snapshotResponse.ok) {
-          const snapshotData = await snapshotResponse.json();
-          papers.forEach(paper => {
-            if (snapshotData[paper.title]) {
-              paper.snapshots = snapshotData[paper.title].snapshots;
-                paper.pdfUrl = snapshotData[paper.title].pdfUrl;
-            }
-          });
-        }
-      }
-
-      setAllPapers(papers);
-      setCandidatePapers(papers.slice(0, 20));
-      setTotal(data.total);
-      addSystemMessage(`"${query}" 검색 → ${papers.length}개 결과`);
-
-      // Record activity with search results
-      recordSearch(query, papers.length, papers);
-
-      // PostHog: Track paper search
-      posthog.capture('paper_searched', {
-        query: query,
-        results_count: papers.length,
-        total_available: data.total,
-      });
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-      setError(errorMessage);
-      setAllPapers([]);
-      setCandidatePapers([]);
-
-      // PostHog: Capture search error
-      posthog.captureException(err instanceof Error ? err : new Error(errorMessage));
-    } finally {
-      setLoading(false);
-    }
+    executeSearch(query, 'form');
   };
 
   const moveToSelected = (paper: Paper) => {
@@ -554,7 +512,7 @@ function SearchContent() {
     }
   };
 
-  const fetchAnalysis = async (paper: Paper) => {
+  const fetchAnalysis = async (paper: Paper, signal: AbortSignal) => {
     if (!paper.abstract || analyses[paper.paperId]) return;
 
     // 이미 요약 중이거나 실패한 논문은 건너뛰기
@@ -563,14 +521,17 @@ function SearchContent() {
     setSummarizingIds(prev => new Set(prev).add(paper.paperId));
 
     try {
+      const email = localStorage.getItem(STORAGE_KEYS.USER_EMAIL);
       const response = await fetch('/api/summarize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(userEmail ? { 'x-user-email': userEmail } : {}),
+          ...(email ? { 'x-user-email': email } : {}),
         },
         body: JSON.stringify({ title: paper.title, abstract: paper.abstract }),
+        signal,
       });
+      if (signal.aborted) return;
       if (response.ok) {
         const analysis = await response.json();
         setAnalyses(prev => {
@@ -583,19 +544,23 @@ function SearchContent() {
         setFailedSummarizeIds(prev => new Set(prev).add(paper.paperId));
       }
     } catch (err) {
+      if (signal.aborted) return;
       console.error('Failed to fetch analysis:', err);
       // 네트워크 오류 시 실패 목록에 추가
       setFailedSummarizeIds(prev => new Set(prev).add(paper.paperId));
     } finally {
-      setSummarizingIds(prev => {
-        const next = new Set(prev);
-        next.delete(paper.paperId);
-        return next;
-      });
+      if (!signal.aborted) {
+        setSummarizingIds(prev => {
+          const next = new Set(prev);
+          next.delete(paper.paperId);
+          return next;
+        });
+      }
     }
   };
 
   const processPapersInBatches = async (papers: Paper[]) => {
+    const signal = searchAbortRef.current?.signal;
     // PostHog: Track batch summarize request
     posthog.capture('papers_summarize_requested', {
       papers_count: papers.length,
@@ -603,8 +568,9 @@ function SearchContent() {
 
     const batchSize = 3;
     for (let i = 0; i < papers.length; i += batchSize) {
+      if (signal?.aborted) return;
       const batch = papers.slice(i, i + batchSize);
-      await Promise.all(batch.map(paper => fetchAnalysis(paper)));
+      await Promise.all(batch.map(paper => fetchAnalysis(paper, signal!)));
     }
   };
 
