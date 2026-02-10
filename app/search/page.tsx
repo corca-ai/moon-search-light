@@ -152,6 +152,8 @@ function SearchContent() {
     const candidates = searchResults.filter(p => !selectedIds.has(p.paperId) && !excludedIds.has(p.paperId));
     setCandidatePapers(candidates.slice(0, 20));
     setDisplayCount(20);
+    setSummarizingIds(new Set());
+    setFailedSummarizeIds(new Set());
   };
 
   // Shared search execution - single source of truth for all search paths
