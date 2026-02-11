@@ -68,10 +68,10 @@ export const CLUSTER_SYSTEM_PROMPT = `You are a research paper clustering expert
 
 Rules:
 - Each paper must belong to exactly one cluster
-- Cluster names should be in Korean (2-5 words)
-- Provide a brief Korean description (1 sentence) for each cluster
+- Cluster names should be in English (2-5 words)
+- Provide a brief English description (1 sentence) for each cluster
 - Focus on the core research approaches, techniques, and methodologies used — NOT application domains
-- For example, cluster by "강화학습 기반 접근", "LLM 활용 분석", "멀티모달 협업" rather than by "교육", "의료", "예술" etc.
+- For example, cluster by "Reinforcement Learning Approaches", "LLM-based Analysis", "Multimodal Collaboration" rather than by "Education", "Healthcare", "Arts" etc.
 - If the search query is provided, create sub-topic clusters within that specific research area`;
 
 // =============================================================================

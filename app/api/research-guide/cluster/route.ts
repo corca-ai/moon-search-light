@@ -15,8 +15,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const ClusterSchema = z.object({
   clusters: z.array(z.object({
-    name: z.string().describe('한국어 클러스터명 (2-5 words)'),
-    description: z.string().describe('한국어 1줄 설명'),
+    name: z.string().describe('English cluster name (2-5 words)'),
+    description: z.string().describe('English 1-sentence description'),
     paperIndices: z.array(z.number()).describe('해당 클러스터 논문 인덱스 (0-based)'),
   })),
 });
