@@ -99,7 +99,6 @@ function SearchContent() {
     updateSortBy: updateSessionSortBy,
     updateSearchResults,
     updateResearchGuide: updateSessionResearchGuide,
-    forkFromCluster,
   } = useSessionManager({
     onError: handleSessionError,
     enableSync: true,
@@ -320,26 +319,33 @@ function SearchContent() {
     },
   });
 
-  // Fork cluster into a new session
+  // Fork cluster into a new session — re-search by cluster name
   const handleForkCluster = useCallback((clusterIndex: number) => {
     const cluster = researchGuide.clusters[clusterIndex];
     if (!cluster) return;
 
-    const clusterPapers = cluster.paperIndices
-      .map((idx) => candidatePapers[idx])
-      .filter(Boolean);
-
-    const result = forkFromCluster({
-      clusterName: cluster.name,
-      papers: clusterPapers,
-      analyses,
-      translations,
-    });
-
+    const result = createNewSession(cluster.name);
     if (!result.success) {
-      setErrorToast('세션 수가 최대치에 도달했습니다. 기존 세션을 삭제해주세요.');
+      setErrorToast(`연구 노트는 최대 ${result.max}개까지 저장할 수 있습니다. 기존 노트를 삭제한 후 다시 시도해주세요.`);
+      return;
     }
-  }, [researchGuide.clusters, candidatePapers, analyses, translations, forkFromCluster]);
+
+    // Reset UI state for the new session
+    setSelectedPapers([]);
+    setCandidatePapers([]);
+    setExcludedPapers([]);
+    setAllPapers([]);
+    setAnalyses({});
+    setTranslations({});
+    setInterestSummary('');
+    setDisplayCount(20);
+    resetAssistant();
+    researchGuide.reset();
+
+    // Search by cluster name to get dedicated results
+    setQuery(cluster.name);
+    executeSearch(cluster.name, 'form');
+  }, [researchGuide.clusters, createNewSession, executeSearch, resetAssistant]);
 
   // Save research guide state to session
   useEffect(() => {

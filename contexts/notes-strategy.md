@@ -9,6 +9,7 @@
 1. **생성**: `canCreateSession()` 확인 → `createSession()` → 저장 → 목록 추가
 2. **전환**: 현재 세션 저장 → `loadSession()` → 현재 ID 변경
 3. **삭제**: 스토리지 제거 → 목록 제거 → (현재 세션이면 새 세션 생성)
+4. **클러스터 분기**: `createNewSession(clusterName)` → UI 리셋 → `executeSearch(clusterName)` (논문 복사 아님, 재검색)
 
 ### 자동 저장
 

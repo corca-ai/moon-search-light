@@ -116,32 +116,32 @@ ClusterTabs 확장:
 
 ---
 
-## 최종 결정: 1. Session Fork
+## 최종 결정: 1. Session Fork (재검색 방식)
 
 ### 제약사항
 
 | 항목 | 결정 |
 |------|------|
 | 세션 상한 | 5 → 10개로 상향 |
-| 복사 범위 | 해당 클러스터 논문 + 분석/번역. 채팅/시드/키워드 미복사 |
+| 분기 방식 | 클러스터명으로 **재검색** (논문 복사 아님) |
 | 출처 추적 | 안 함. 완전히 독립된 세션으로 생성 |
 | 세션 이름 | 클러스터명 기반 자동 생성 |
 
+### 재검색 방식을 선택한 이유
+
+원본 검색이 넓은 쿼리(예: "Accelerating Scientific Research")이면, 100편 중 특정 클러스터에 해당하는 논문은 12편 정도에 불과하다. 클러스터명(예: "실험 자동화")으로 직접 검색하면 해당 주제의 논문 100편을 확보할 수 있다.
+
 ### 구현
 
-- `createSessionFromCluster()` — 클러스터 논문 + 분석/번역으로 새 세션 생성
-- `useSessionManager.forkFromCluster()` — 세션 매니저에서 분기 실행
+```
+[세션으로 분리] 클릭
+  → createNewSession(cluster.name)      새 빈 세션 생성
+  → UI 상태 전체 리셋                    candidatePapers, analyses 등
+  → researchGuide.reset()               searchedViaKeyword 초기화
+  → executeSearch(cluster.name)          클러스터명으로 재검색
+```
+
+- `handleForkCluster` — `createNewSession` + UI 리셋 + `executeSearch(cluster.name)`
+- `researchGuide.reset()` — `prevCandidateLengthRef`도 초기화하여 불필요한 클러스터링 방지
 - ClusterTabs에 "세션으로 분리" 버튼 — 활성 클러스터 선택 시 표시
 - 세션 상한 `MAX_SESSION_COUNT` 5 → 10으로 변경
-
-### 수정 파일
-
-```
-app/features/notes/principles.ts     — MAX_SESSION_COUNT 5 → 10
-app/features/notes/strategies.ts     — createSessionFromCluster() 추가
-app/features/notes/index.ts          — export 추가
-app/lib/session-storage.ts           — re-export 추가
-app/hooks/useSessionManager.ts       — forkFromCluster() 추가
-app/components/ClusterTabs.tsx       — onFork prop + 분리 버튼
-app/search/page.tsx                  — handleForkCluster 핸들러 연결
-```

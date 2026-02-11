@@ -119,4 +119,29 @@
 
 ---
 
+## 7. 클러스터 세션 분기 (Fork)
+
+### 동작
+
+클러스터 "세션으로 분리" 클릭 시 **논문을 복사하지 않고 재검색**한다.
+
+```
+[세션으로 분리] 클릭
+  → createNewSession(cluster.name)
+  → UI 상태 전체 리셋
+  → researchGuide.reset()
+  → executeSearch(cluster.name)
+```
+
+### 재검색 근거
+
+원본 검색의 100편 중 클러스터에 해당하는 논문은 소수(예: 12편). 클러스터명으로 직접 검색하면 해당 주제의 논문 100편을 확보할 수 있다.
+
+### reset 시 초기화 항목
+
+- 모든 상태값 (`seed`, `keywords`, `clusters`, `searchedViaKeyword` 등)
+- `prevCandidateLengthRef` → 0으로 초기화 (세션 전환 시 stale ref로 인한 불필요한 클러스터링 방지)
+
+---
+
 > **동기화 지침**: 이 문서를 수정하면 `app/features/research-guide/strategies.ts`도 함께 수정해야 합니다.

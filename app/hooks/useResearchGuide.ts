@@ -211,6 +211,7 @@ export function useResearchGuide({
     setSearchedViaKeyword(false);
     setIsExtractingKeywords(false);
     setIsClustering(false);
+    prevCandidateLengthRef.current = 0;
   }, []);
 
   return {
