@@ -23,7 +23,7 @@ const ClusterSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const { papers } = await request.json();
+    const { papers, query } = await request.json();
 
     const validation = validateClusterInput(papers);
     if (!validation.valid) {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     const response = await ai.models.generateContent({
       model: RESEARCH_GUIDE_MODEL,
-      contents: buildClusterPrompt(papers),
+      contents: buildClusterPrompt(papers, query),
       config: {
         systemInstruction: getClusterSystemPrompt(),
         temperature: RESEARCH_GUIDE_TEMPERATURE,

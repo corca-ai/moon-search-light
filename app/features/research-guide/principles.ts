@@ -70,7 +70,9 @@ Rules:
 - Each paper must belong to exactly one cluster
 - Cluster names should be in Korean (2-5 words)
 - Provide a brief Korean description (1 sentence) for each cluster
-- Create meaningful groupings based on research themes, methodologies, or problem domains`;
+- Focus on the core research approaches, techniques, and methodologies used — NOT application domains
+- For example, cluster by "강화학습 기반 접근", "LLM 활용 분석", "멀티모달 협업" rather than by "교육", "의료", "예술" etc.
+- If the search query is provided, create sub-topic clusters within that specific research area`;
 
 // =============================================================================
 // 5. 에러 메시지

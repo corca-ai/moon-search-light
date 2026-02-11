@@ -53,6 +53,7 @@ export function useResearchGuide({
   const extractAbortRef = useRef<AbortController | null>(null);
   const clusterAbortRef = useRef<AbortController | null>(null);
   const prevCandidateLengthRef = useRef(0);
+  const lastKeywordRef = useRef('');
 
   // Seed paper setting + keyword extraction
   const setSeedPaper = useCallback((paper: Paper) => {
@@ -109,10 +110,12 @@ export function useResearchGuide({
     setClusters([]);
     setActiveClusterIndex(null);
     setSearchedViaKeyword(false);
+    lastKeywordRef.current = '';
   }, []);
 
   // Keyword search
   const searchByKeyword = useCallback((keyword: ResearchKeyword) => {
+    lastKeywordRef.current = keyword.keyword;
     setSearchedViaKeyword(true);
     setClusters([]);
     setActiveClusterIndex(null);
@@ -141,7 +144,7 @@ export function useResearchGuide({
     fetch(CLUSTER_API_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ papers }),
+      body: JSON.stringify({ papers, query: lastKeywordRef.current }),
       signal: controller.signal,
     })
       .then(res => {
@@ -212,6 +215,7 @@ export function useResearchGuide({
     setIsExtractingKeywords(false);
     setIsClustering(false);
     prevCandidateLengthRef.current = 0;
+    lastKeywordRef.current = '';
   }, []);
 
   return {

@@ -44,16 +44,16 @@ Respond in JSON format:
 /**
  * 클러스터링 사용자 프롬프트 생성
  */
-export function buildClusterPrompt(papers: Array<{ title: string; abstract: string | null }>): string {
+export function buildClusterPrompt(papers: Array<{ title: string; abstract: string | null }>, searchQuery?: string): string {
   const paperList = papers.map((p, i) =>
     `[${i}] ${p.title}${p.abstract ? `\n    ${p.abstract.slice(0, 200)}...` : ''}`
   ).join('\n');
 
-  return `Papers to cluster:
+  return `${searchQuery ? `Search query: "${searchQuery}"\n\n` : ''}Papers to cluster:
 ${paperList}
 
 Group these ${papers.length} papers into ${CLUSTERS_MIN}-${CLUSTERS_MAX} thematic clusters.
-Each paper (referenced by index) must belong to exactly one cluster.
+${searchQuery ? `These papers were found by searching "${searchQuery}". Create clusters that reflect meaningful sub-topics within this research area.\n` : ''}Each paper (referenced by index) must belong to exactly one cluster.
 
 Respond in JSON format:
 {
