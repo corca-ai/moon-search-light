@@ -99,6 +99,7 @@ function SearchContent() {
     updateSortBy: updateSessionSortBy,
     updateSearchResults,
     updateResearchGuide: updateSessionResearchGuide,
+    forkFromCluster,
   } = useSessionManager({
     onError: handleSessionError,
     enableSync: true,
@@ -318,6 +319,27 @@ function SearchContent() {
       executeSearch(searchQuery, 'form');
     },
   });
+
+  // Fork cluster into a new session
+  const handleForkCluster = useCallback((clusterIndex: number) => {
+    const cluster = researchGuide.clusters[clusterIndex];
+    if (!cluster) return;
+
+    const clusterPapers = cluster.paperIndices
+      .map((idx) => candidatePapers[idx])
+      .filter(Boolean);
+
+    const result = forkFromCluster({
+      clusterName: cluster.name,
+      papers: clusterPapers,
+      analyses,
+      translations,
+    });
+
+    if (!result.success) {
+      setErrorToast('세션 수가 최대치에 도달했습니다. 기존 세션을 삭제해주세요.');
+    }
+  }, [researchGuide.clusters, candidatePapers, analyses, translations, forkFromCluster]);
 
   // Save research guide state to session
   useEffect(() => {
@@ -1064,6 +1086,7 @@ function SearchContent() {
                   isClustering={researchGuide.isClustering}
                   activeClusterIndex={researchGuide.activeClusterIndex}
                   onSelect={researchGuide.setActiveCluster}
+                  onFork={handleForkCluster}
                 />
               )}
 

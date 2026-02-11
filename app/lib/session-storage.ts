@@ -9,6 +9,7 @@ export {
   type LoadResult,
   createEmptyState,
   createSession,
+  createSessionFromCluster,
   saveSession,
   loadSession,
   deleteSession,

@@ -159,7 +159,7 @@
 ## 제약사항
 
 ### 비용
-- **모델**: `gemini-2.0-flash` 사용 (이 기능 한정). 기존 기능(요약/번역/채팅 등)은 OpenAI 유지
+- **모델**: `gemini-3-flash-preview` 사용 (전체 AI 기능 동일 모델)
 - 기능 1회 실행당 API 호출 횟수를 최소화하되, 효과가 확실하면 2~3회까지 허용
 
 ### 응답 속도
@@ -218,7 +218,7 @@
 - `/api/research-guide/extract-keywords` — 시드 지정 시 호출
 - `/api/research-guide/cluster` — 키워드 검색 후 호출
 
-**모델**: gemini-2.0-flash (이 기능 한정)
+**모델**: gemini-3-flash-preview
 
 ### UI 배치
 

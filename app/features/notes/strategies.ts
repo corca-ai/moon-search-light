@@ -417,7 +417,69 @@ export function getSessionCount(): number {
 }
 
 // =============================================================================
-// 8. Import/Export
+// 8. 클러스터 분기
+// =============================================================================
+
+export interface ForkFromClusterParams {
+  /** 클러스터명 (세션 이름으로 사용) */
+  clusterName: string;
+  /** 해당 클러스터의 논문 목록 */
+  papers: import('./types').Paper[];
+  /** 해당 논문들의 분석 결과 */
+  analyses: Record<string, import('./types').PaperAnalysis>;
+  /** 해당 논문들의 번역 결과 */
+  translations: Record<string, string>;
+}
+
+/**
+ * 클러스터에서 새 세션을 분기 생성
+ *
+ * 클러스터의 논문 + 분석/번역 결과를 복사하여 독립 세션으로 만든다.
+ * 채팅/시드/키워드 등은 복사하지 않는다.
+ */
+export function createSessionFromCluster(params: ForkFromClusterParams): Session {
+  const { clusterName, papers, analyses, translations } = params;
+  const now = new Date().toISOString();
+  const id = generateId();
+
+  // 해당 논문에 대한 분석/번역만 필터링
+  const filteredAnalyses: Record<string, import('./types').PaperAnalysis> = {};
+  const filteredTranslations: Record<string, string> = {};
+
+  for (const paper of papers) {
+    if (analyses[paper.paperId]) {
+      filteredAnalyses[paper.paperId] = analyses[paper.paperId];
+    }
+    if (translations[paper.paperId]) {
+      filteredTranslations[paper.paperId] = translations[paper.paperId];
+    }
+  }
+
+  return {
+    id,
+    name: clusterName,
+    createdAt: now,
+    updatedAt: now,
+    state: {
+      ...createEmptyState(),
+      searchResults: papers,
+      analyses: filteredAnalyses,
+      translations: filteredTranslations,
+    },
+    activities: [
+      {
+        id: generateId(),
+        type: 'note_created',
+        timestamp: now,
+        data: { name: clusterName },
+      },
+    ],
+    version: SESSION_VERSION,
+  };
+}
+
+// =============================================================================
+// 9. Import/Export
 // =============================================================================
 
 /**

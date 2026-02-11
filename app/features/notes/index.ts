@@ -106,6 +106,9 @@ export {
   removeFromSessionList,
   renameInSessionList,
   getSessionCount,
+  // 클러스터 분기
+  createSessionFromCluster,
+  type ForkFromClusterParams,
   // Import/Export
   exportSession,
   importSession,

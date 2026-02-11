@@ -21,7 +21,7 @@
 
 | 상수 | 값 |
 |------|-----|
-| `CHAT_MODEL` | "gpt-4o-mini" |
+| `CHAT_MODEL` | "gemini-3-flash-preview" |
 | `RECOMMENDED_RESPONSE_LENGTH` | 500 |
 | `ABSTRACT_MAX_LENGTH` | 300 |
 

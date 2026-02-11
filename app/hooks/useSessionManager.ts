@@ -13,6 +13,7 @@ import {
 } from '../types/session';
 import {
   createSession,
+  createSessionFromCluster,
   saveSession,
   loadSession,
   deleteSession,
@@ -21,6 +22,7 @@ import {
   SessionStorageError,
   SessionErrorCallback,
 } from '../lib/session-storage';
+import type { ForkFromClusterParams } from '../features/notes';
 import {
   getSessionList,
   addToSessionList,
@@ -156,6 +158,34 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     [session, sessionList]
   );
 
+  // Fork a cluster into a new independent session
+  const forkFromCluster = useCallback(
+    (params: ForkFromClusterParams): CreateSessionResult => {
+      if (!canCreateSession()) {
+        return {
+          success: false,
+          reason: 'limit_reached',
+          current: getSessionCount(),
+          max: MAX_SESSION_COUNT,
+        };
+      }
+
+      // Save current session first
+      if (session.session) {
+        saveSession(session.session);
+        updateSessionListItem(session.session);
+      }
+
+      const newSession = createSessionFromCluster(params);
+      saveSession(newSession);
+      addToSessionList(newSession);
+      session.switchSession(newSession);
+      sessionList.refresh();
+      return { success: true, session: newSession };
+    },
+    [session, sessionList]
+  );
+
   // Get current session state for restoration
   const getSessionState = useCallback((): SessionState | null => {
     return session.session?.state ?? null;
@@ -190,6 +220,7 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     createNewSession,
     deleteSession: deleteSessionById,
     renameSession: renameSessionById,
+    forkFromCluster,
 
     // State restoration
     getSessionState,

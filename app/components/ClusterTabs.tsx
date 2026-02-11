@@ -8,6 +8,7 @@ interface ClusterTabsProps {
   isClustering: boolean;
   activeClusterIndex: number | null;
   onSelect: (index: number | null) => void;
+  onFork?: (clusterIndex: number) => void;
 }
 
 export function ClusterTabs({
@@ -15,6 +16,7 @@ export function ClusterTabs({
   isClustering,
   activeClusterIndex,
   onSelect,
+  onFork,
 }: ClusterTabsProps) {
   if (isClustering) {
     return (
@@ -28,7 +30,7 @@ export function ClusterTabs({
   if (clusters.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 py-2">
+    <div className="flex flex-wrap items-center gap-2 py-2">
       {/* All tab */}
       <button
         onClick={() => onSelect(null)}
@@ -56,6 +58,17 @@ export function ClusterTabs({
           {cluster.name} ({cluster.paperIndices.length})
         </button>
       ))}
+
+      {/* Fork button — visible when a cluster is selected */}
+      {activeClusterIndex !== null && onFork && (
+        <button
+          onClick={() => onFork(activeClusterIndex)}
+          className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700`}
+          title="이 클러스터를 별도 세션으로 분리"
+        >
+          세션으로 분리
+        </button>
+      )}
     </div>
   );
 }

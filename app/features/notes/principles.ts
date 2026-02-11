@@ -12,7 +12,7 @@
 // =============================================================================
 
 /** 최대 세션 수 */
-export const MAX_SESSION_COUNT = 5;
+export const MAX_SESSION_COUNT = 10;
 
 /** 최대 활동 기록 수 (FIFO로 관리) */
 export const MAX_ACTIVITY_COUNT = 10;

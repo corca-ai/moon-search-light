@@ -210,6 +210,7 @@ Semantic Scholar API (2억 건 이상 학술 논문)
 - 3-6개 주제별 클러스터로 분류
 - 탭 형태로 필터링 (정렬 드롭다운과 결과 목록 사이)
 - 일반 검색에서는 클러스터링 미실행
+- 클러스터 선택 시 "세션으로 분리" 버튼 표시 → 해당 클러스터 논문 + 분석/번역을 독립 세션으로 분기
 
 ## Research Assistant
 
@@ -318,7 +319,7 @@ ArXiv 논문 스냅샷 이미지는 CSV 데이터베이스에서 조회하며, �
 | 영역 | 기술 |
 |------|------|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 3.4 |
-| AI | Google Gemini 3 Flash (요약/번역/채팅), Gemini 2.0 Flash (키워드 추출/클러스터링), OpenAI text-embedding-3-small (임베딩) |
+| AI | Google Gemini 3 Flash (요약/번역/채팅/키워드 추출/클러스터링), OpenAI text-embedding-3-small (임베딩) |
 | 검색 | Semantic Scholar API |
 | 검증 | Zod (API 응답 스키마 검증) |
 | Analytics | PostHog (클라이언트 + 서버 + 리버스 프록시) |

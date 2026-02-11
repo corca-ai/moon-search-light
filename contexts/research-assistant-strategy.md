@@ -8,7 +8,7 @@
 
 1. 컨텍스트 추출 (papers, analyses, contextSummary)
 2. 시스템 프롬프트 구성
-3. OpenAI 스트리밍 호출
+3. Gemini 스트리밍 호출 (generateContentStream)
 4. SSE 형식으로 응답 전달
 
 ### 시스템 프롬프트 구성

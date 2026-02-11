@@ -23,7 +23,7 @@
 
 | 상수 | 값 |
 |------|-----|
-| `MAX_SESSION_COUNT` | 5 |
+| `MAX_SESSION_COUNT` | 10 |
 | `MAX_ACTIVITY_COUNT` | 10 |
 | `SESSION_VERSION` | "1.0.0" |
 
