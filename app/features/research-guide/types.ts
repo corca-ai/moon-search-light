@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import type { Paper } from '@/app/api/search/route';
 
 // =============================================================================
 // 1. 키워드 추출
@@ -125,6 +126,8 @@ export const ClusterResponseSchema = z.object({
  */
 export interface ResearchGuideSessionState {
   seedPaperId: string | null;
+  /** 시드 논문 전체 객체 (복원 시 searchResults에 없을 수 있으므로 직접 저장) */
+  seedPaper?: Paper | null;
   seedDescription: string;
   keywords: ResearchKeyword[];
   clusters: Cluster[];

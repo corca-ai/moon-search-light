@@ -54,6 +54,7 @@ export function useResearchGuide({
   const clusterAbortRef = useRef<AbortController | null>(null);
   const prevCandidateLengthRef = useRef(0);
   const lastKeywordRef = useRef('');
+  const restoringRef = useRef(false);
 
   // Seed paper setting + keyword extraction
   const setSeedPaper = useCallback((paper: Paper) => {
@@ -124,6 +125,11 @@ export function useResearchGuide({
 
   // Auto-cluster when candidatePapers change after keyword search
   useEffect(() => {
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      prevCandidateLengthRef.current = candidatePapers.length;
+      return;
+    }
     if (!searchedViaKeyword) return;
     if (candidatePapers.length === prevCandidateLengthRef.current) return;
     prevCandidateLengthRef.current = candidatePapers.length;
@@ -180,6 +186,7 @@ export function useResearchGuide({
   // Session state getter
   const getSessionState = useCallback((): ResearchGuideSessionState => ({
     seedPaperId: seedPaper?.paperId ?? null,
+    seedPaper: seedPaper ?? null,
     seedDescription,
     keywords,
     clusters,
@@ -189,9 +196,13 @@ export function useResearchGuide({
 
   // Restore from session
   const restoreState = useCallback((state: ResearchGuideSessionState, allPapers: Paper[]) => {
-    if (state.seedPaperId) {
+    restoringRef.current = true;
+    if (state.seedPaper) {
+      setSeedPaperState(state.seedPaper);
+    } else if (state.seedPaperId) {
       const seed = allPapers.find(p => p.paperId === state.seedPaperId);
       if (seed) setSeedPaperState(seed);
+      else setSeedPaperState(null);
     } else {
       setSeedPaperState(null);
     }
