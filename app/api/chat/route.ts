@@ -1,10 +1,8 @@
 import { NextRequest } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import { getPostHogClient } from '@/app/lib/posthog-server';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,13 +82,18 @@ ${contextSummary.researchLandscape}`;
 - 모든 응답은 가능하면 500글자 이하로 하세요.
 - 필요하면 질문하여 요청을 구체화하세요`;
 
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages.map((m: any) => ({ role: m.role, content: m.content })),
-      ],
-      stream: true,
+    // Convert OpenAI message format to Gemini contents format
+    const contents = messages.map((m: any) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
+
+    const stream = await ai.models.generateContentStream({
+      model: 'gemini-3-flash-preview',
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+      },
     });
 
     const encoder = new TextEncoder();
@@ -98,7 +101,7 @@ ${contextSummary.researchLandscape}`;
     const readableStream = new ReadableStream({
       async start(controller) {
         for await (const chunk of stream) {
-          const content = chunk.choices[0]?.delta?.content || '';
+          const content = chunk.text || '';
           if (content) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
           }

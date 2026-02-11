@@ -355,6 +355,13 @@ export function useSession() {
     [updateState]
   );
 
+  const updateResearchGuide = useCallback(
+    (researchGuide: SessionState['researchGuide']) => {
+      updateState({ researchGuide });
+    },
+    [updateState]
+  );
+
   // Sync all state at once (for initial load from session)
   const syncFromSession = useCallback(() => {
     return session?.state ?? null;
@@ -381,6 +388,7 @@ export function useSession() {
     updateAssistantActive,
     updateSortBy,
     updateSearchResults,
+    updateResearchGuide,
     syncFromSession,
   };
 }

@@ -12,7 +12,7 @@
 // =============================================================================
 
 /** 채팅 모델 */
-export const CHAT_MODEL = 'gpt-4o-mini';
+export const CHAT_MODEL = 'gemini-3-flash-preview';
 
 /** 권장 응답 길이 (문자) */
 export const RECOMMENDED_RESPONSE_LENGTH = 500;

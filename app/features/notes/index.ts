@@ -74,6 +74,7 @@ export type {
   SessionSyncOptions,
   // 외부 타입
   Paper,
+  ResearchGuideSessionState,
 } from './types';
 
 export { SessionStorageError } from './types';

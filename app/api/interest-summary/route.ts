@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,17 +21,17 @@ ${selectedTitles.length > 0 ? selectedTitles.map((t: string) => `- ${t}`).join('
 - 예: "Vision Transformer를 활용한 이미지 분류"
 - 예: "Transformer 기반 대규모 언어 모델과 사전학습 기법"`;
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: '연구 관심사를 분석하는 전문가. 간결하게 답변.' },
-        { role: 'user', content: prompt },
-      ],
-      max_tokens: 200,
-      temperature: 0.3,
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        systemInstruction: '연구 관심사를 분석하는 전문가. 간결하게 답변.',
+        maxOutputTokens: 200,
+        temperature: 0.3,
+      },
     });
 
-    const summary = completion.choices[0].message.content?.trim() || '';
+    const summary = response.text?.trim() || '';
 
     return NextResponse.json({ summary });
   } catch (error) {

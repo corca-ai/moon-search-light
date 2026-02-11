@@ -19,6 +19,7 @@
 | [contexts/ai-analysis-*.md](../contexts/) | AI 분석 원칙/전략/포맷 |
 | [contexts/relevance-*.md](../contexts/) | 관련도 분석 원칙/전략/포맷 |
 | [contexts/research-assistant-*.md](../contexts/) | Research Assistant 원칙/전략/포맷 |
+| [contexts/research-guide-*.md](../contexts/) | Research Guide 원칙/전략/포맷 |
 
 ## 해결하는 문제
 
@@ -133,6 +134,7 @@ Semantic Scholar API (2억 건 이상 학술 논문)
 |------|------|
 | ⭐ | 논문을 선택 목록에 추가 |
 | ✓ | 논문을 검토 완료로 이동 |
+| ☀ | 시드 논문으로 지정 (Research Guide) |
 | ★ | 선택 해제 |
 | 다시 검토 | 검토 완료된 논문 복원 |
 
@@ -163,7 +165,7 @@ Semantic Scholar API (2억 건 이상 학술 논문)
 
 ### 초록 번역
 
-- GPT-4o-mini로 영문 초록 → 한국어 번역
+- Gemini 3 Flash로 영문 초록 → 한국어 번역
 - 토글 방식으로 원문/번역 전환
 
 ### 관련도 표시
@@ -177,6 +179,37 @@ Semantic Scholar API (2억 건 이상 학술 논문)
 - **스케일**: 0-100% (높을수록 비슷한 주제)
 - **배치 처리**: 최대 50개 텍스트 동시 임베딩
 - **캐싱**: 임베딩 결과 캐시로 중복 API 호출 방지
+
+## Research Guide
+
+> 상세 내용: [contexts/research-guide-*.md](../contexts/)
+
+논문 하나를 시드로 지정하면, 해당 분야의 연구 지형을 탐색할 수 있도록 돕는 기능입니다.
+
+### 흐름
+
+```
+시드 논문 지정 → 키워드 추출 → 키워드 클릭 → 검색 실행 → 결과 클러스터링 → 필터링
+```
+
+### 시드 논문
+
+- 검색 결과 카드에서 시드 버튼(☀)으로 지정
+- 한 번에 1개만 허용, 교체 가능
+- abstract 없으면 시드 불가
+
+### 키워드 추출
+
+- Gemini 2.0 Flash로 시드 논문에서 3-5개 탐색용 키워드 추출
+- 키워드 칩 형태로 검색창 아래 표시
+- 클릭 시 해당 키워드로 즉시 검색
+
+### 자동 클러스터링
+
+- 키워드 검색 후 결과 5개 이상이면 자동 실행
+- 3-6개 주제별 클러스터로 분류
+- 탭 형태로 필터링 (정렬 드롭다운과 결과 목록 사이)
+- 일반 검색에서는 클러스터링 미실행
 
 ## Research Assistant
 
@@ -244,6 +277,8 @@ Semantic Scholar API (2억 건 이상 학술 논문)
 | `/api/context-summary` | POST | 통합 컨텍스트 분석 (2개+ 논문) |
 | `/api/chat` | POST | Research Assistant 채팅 (스트리밍) |
 | `/api/paper-images` | POST | ArXiv 논문 스냅샷 이미지 조회 |
+| `/api/research-guide/extract-keywords` | POST | 시드 논문 기반 탐색 키워드 추출 |
+| `/api/research-guide/cluster` | POST | 논문 목록 주제별 클러스터링 |
 
 ## UX/UI 컴포넌트
 
@@ -254,6 +289,8 @@ Semantic Scholar API (2억 건 이상 학술 논문)
 | **SelectedPapersSection** | 선택/검토 완료 논문 수평 카드 영역 |
 | **HorizontalPaperCard** | 선택 영역의 간결한 논문 카드 |
 | **PaperDetailModal** | 논문 상세 모달 (메타데이터 + 분석) |
+| **ResearchKeywords** | 시드 논문 키워드 칩 (검색창 아래) |
+| **ClusterTabs** | 클러스터 필터 탭 (결과 목록 위) |
 
 ## 성능 최적화
 
@@ -281,7 +318,7 @@ ArXiv 논문 스냅샷 이미지는 CSV 데이터베이스에서 조회하며, �
 | 영역 | 기술 |
 |------|------|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 3.4 |
-| AI | OpenAI GPT-4o-mini (요약/번역/채팅), text-embedding-3-small (임베딩) |
+| AI | Google Gemini 3 Flash (요약/번역/채팅), Gemini 2.0 Flash (키워드 추출/클러스터링), OpenAI text-embedding-3-small (임베딩) |
 | 검색 | Semantic Scholar API |
 | 검증 | Zod (API 응답 스키마 검증) |
 | Analytics | PostHog (클라이언트 + 서버 + 리버스 프록시) |
@@ -306,6 +343,7 @@ app/features/{feature}/
 | `ai-analysis` | 논문 요약, 컨텍스트 분석 프롬프트 | `contexts/ai-analysis-*.md` |
 | `relevance` | 벡터 유사도, 관련도 계산 | `contexts/relevance-*.md` |
 | `research-assistant` | 채팅 프롬프트, 내보내기 | `contexts/research-assistant-*.md` |
+| `research-guide` | 키워드 추출, 클러스터링 | `contexts/research-guide-*.md` |
 
 ## 디자인 원칙
 

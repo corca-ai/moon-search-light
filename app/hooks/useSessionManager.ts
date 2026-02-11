@@ -216,5 +216,6 @@ export function useSessionManager(options: UseSessionManagerOptions = {}) {
     updateAssistantActive: session.updateAssistantActive,
     updateSortBy: session.updateSortBy,
     updateSearchResults: session.updateSearchResults,
+    updateResearchGuide: session.updateResearchGuide,
   };
 }

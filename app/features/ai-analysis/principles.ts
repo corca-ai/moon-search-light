@@ -12,7 +12,7 @@
 // =============================================================================
 
 /** 요약/번역/분석에 사용하는 모델 */
-export const AI_MODEL = 'gpt-4o-mini';
+export const AI_MODEL = 'gemini-3-flash-preview';
 
 /** 임베딩에 사용하는 모델 */
 export const EMBEDDING_MODEL = 'text-embedding-3-small';

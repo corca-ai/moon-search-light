@@ -84,6 +84,7 @@ export function createEmptyState(): SessionState {
     contextSummary: null,
     chatMessages: [],
     assistantActive: false,
+    researchGuide: undefined,
   };
 }
 

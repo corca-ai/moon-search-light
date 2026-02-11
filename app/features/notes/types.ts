@@ -9,6 +9,7 @@
 
 import type { Paper } from '../../api/search/route';
 import type { ActivityType, SessionStorageErrorCode } from './principles';
+import type { ResearchGuideSessionState } from '../research-guide/types';
 
 // =============================================================================
 // 1. 핵심 타입
@@ -73,6 +74,8 @@ export interface SessionState {
   chatMessages: ChatMessage[];
   /** 어시스턴트 패널 활성화 여부 */
   assistantActive: boolean;
+  /** Research Guide 상태 */
+  researchGuide?: ResearchGuideSessionState;
 }
 
 /**
@@ -235,3 +238,4 @@ export interface SessionSyncOptions {
 // =============================================================================
 
 export type { Paper };
+export type { ResearchGuideSessionState };

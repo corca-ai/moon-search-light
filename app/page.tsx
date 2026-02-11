@@ -411,7 +411,7 @@ export default function LandingPage() {
             <span className="font-medium">Moon Search Light</span>
           </div>
           <p className="text-slate-400 text-sm">
-            Powered by Semantic Scholar API & OpenAI
+            Powered by Semantic Scholar API & Google Gemini
           </p>
         </div>
       </footer>

@@ -6,12 +6,15 @@ import posthog from 'posthog-js';
 import type { Paper } from '../api/search/route';
 import { SelectedPapersSection } from '../components/SelectedPapersSection';
 import { SearchResultCard } from '../components/SearchResultCard';
+import { ResearchKeywords } from '../components/ResearchKeywords';
+import { ClusterTabs } from '../components/ClusterTabs';
 import { PaperDetailModal } from '../components/PaperDetailModal';
 import { NoteSidebar } from '../components/NoteSidebar';
 import { styles } from '../components/styles';
 import { useSessionManager } from '../hooks/useSessionManager';
 import { useResearchAssistant } from '../hooks/useResearchAssistant';
 import { useRelevanceScore } from '../hooks/useRelevanceScore';
+import { useResearchGuide } from '../hooks/useResearchGuide';
 import {
   SORT_WEIGHT_YEAR_DEFAULT,
   SORT_WEIGHT_CITATION_DEFAULT,
@@ -95,6 +98,7 @@ function SearchContent() {
     updateAssistantActive: updateSessionAssistantActive,
     updateSortBy: updateSessionSortBy,
     updateSearchResults,
+    updateResearchGuide: updateSessionResearchGuide,
   } = useSessionManager({
     onError: handleSessionError,
     enableSync: true,
@@ -156,6 +160,13 @@ function SearchContent() {
 
     summarizeAbortRef.current?.abort();
     summarizeAbortRef.current = null;
+    // Research Guide 상태 복원
+    if (state.researchGuide) {
+      researchGuide.restoreState(state.researchGuide, searchResults);
+    } else {
+      researchGuide.reset();
+    }
+
     // 세션 복원 직후 명시적으로 summarize 시작
     runSummarize([...state.selectedPapers, ...candidates.slice(0, 20)], state.analyses);
   };
@@ -299,6 +310,21 @@ function SearchContent() {
     }
   }, [recordSearch, runSummarize]);
 
+  // Research Guide hook
+  const researchGuide = useResearchGuide({
+    candidatePapers,
+    onSearch: (searchQuery: string) => {
+      setQuery(searchQuery);
+      executeSearch(searchQuery, 'form');
+    },
+  });
+
+  // Save research guide state to session
+  useEffect(() => {
+    if (!isReady) return;
+    updateSessionResearchGuide(researchGuide.getSessionState());
+  }, [researchGuide.seedPaper, researchGuide.seedDescription, researchGuide.keywords, researchGuide.clusters, researchGuide.activeClusterIndex, researchGuide.searchedViaKeyword, isReady]);
+
   // Single initialization: pending query check → session restore → ready
   useEffect(() => {
     if (isSessionLoading || isReady) return;
@@ -377,6 +403,7 @@ function SearchContent() {
     setInterestSummary('');
     setDisplayCount(20);
     resetAssistant();
+    researchGuide.reset();
 
     posthog.capture('note_created', { note_name: result.session.name });
   };
@@ -398,6 +425,7 @@ function SearchContent() {
       setInterestSummary('');
       setDisplayCount(20);
       resetAssistant();
+      researchGuide.reset();
     }
 
     posthog.capture('note_deleted', { note_id: id });
@@ -978,6 +1006,18 @@ function SearchContent() {
                 </p>
               </div>
 
+              {/* Research Guide: 시드 논문 키워드 */}
+              {researchGuide.seedPaper && (
+                <ResearchKeywords
+                  seedPaper={researchGuide.seedPaper}
+                  seedDescription={researchGuide.seedDescription}
+                  keywords={researchGuide.keywords}
+                  isExtractingKeywords={researchGuide.isExtractingKeywords}
+                  onKeywordClick={researchGuide.searchByKeyword}
+                  onClear={researchGuide.clearSeedPaper}
+                />
+              )}
+
               {error && (
                 <div className={`p-4 text-sm ${styles.text.secondary} ${styles.bg.tertiary} rounded-xl flex items-center gap-3`}>
                   <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1017,9 +1057,19 @@ function SearchContent() {
                 </select>
               </div>
 
+              {/* Research Guide: 클러스터 탭 */}
+              {researchGuide.searchedViaKeyword && (
+                <ClusterTabs
+                  clusters={researchGuide.clusters}
+                  isClustering={researchGuide.isClustering}
+                  activeClusterIndex={researchGuide.activeClusterIndex}
+                  onSelect={researchGuide.setActiveCluster}
+                />
+              )}
+
               {/* 검색 결과 */}
               <div className={`space-y-4 overflow-y-auto scrollbar-thin pr-1 ${assistantActive ? 'max-h-[calc(100vh-480px)]' : 'max-h-[calc(100vh-420px)]'}`}>
-                {sortPapers(candidatePapers, sortBy).map(paper => (
+                {sortPapers(researchGuide.getFilteredPapers(candidatePapers), sortBy).map(paper => (
                   <SearchResultCard
                     key={paper.paperId}
                     paper={paper}
@@ -1027,8 +1077,10 @@ function SearchContent() {
                     translation={translations[paper.paperId]}
                     isTranslating={translatingIds.has(paper.paperId)}
                     relevanceScore={relevanceScores[paper.paperId]}
+                    isSeed={researchGuide.seedPaper?.paperId === paper.paperId}
                     onSelect={moveToSelected}
                     onExclude={excludePaper}
+                    onSeed={researchGuide.setSeedPaper}
                     onImageClick={(url) => setModalImage(url)}
                     onTranslate={translateAbstract}
                   />
